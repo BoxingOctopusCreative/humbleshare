@@ -17,9 +17,9 @@
 
 <SentryClientInit dsn={data.sentryDsn} />
 
-<div class="flex min-h-screen flex-col">
+<div class="flex h-dvh flex-col overflow-hidden">
 	<header
-		class="relative z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 shadow-[0_4px_16px_rgba(0,0,0,0.35)] backdrop-blur"
+		class="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 shadow-[0_4px_16px_rgba(0,0,0,0.35)] backdrop-blur"
 	>
 		<div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
 			<a href={resolve('/')} class="flex items-center no-underline hover:no-underline">
@@ -47,11 +47,13 @@
 			</nav>
 		</div>
 	</header>
-	<main class="relative z-10 mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-		{@render children()}
+	<main class="relative z-10 min-h-0 flex-1 overflow-y-auto">
+		<div class="mx-auto w-full max-w-6xl px-4 py-6">
+			{@render children()}
+		</div>
 	</main>
 	<footer
-		class="relative z-10 mt-auto border-t border-[var(--color-border)] bg-[var(--color-surface)]/60"
+		class="sticky bottom-0 z-20 shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)]/80 shadow-[0_-4px_16px_rgba(0,0,0,0.25)] backdrop-blur"
 	>
 		<div
 			class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-xs text-[var(--color-muted)]"

@@ -53,6 +53,12 @@
 						<span class="text-xs text-[var(--color-muted)]">{page.note}</span>
 					</li>
 				{/each}
+				<li class="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2.5">
+					<span class="font-medium text-[var(--color-text)]">/u/[slug]</span>
+					<span class="text-xs text-[var(--color-muted)]"
+						>Public profiles when the owner opts in</span
+					>
+				</li>
 			</ul>
 		</div>
 

@@ -33,6 +33,7 @@ type CodeRepository interface {
 	ClaimOldestAvailable(ctx context.Context, gameID uuid.UUID, claimedBy string, claimedByUserID *string) (*models.ClaimResult, error)
 	Create(ctx context.Context, gameID uuid.UUID, codeValue, codeType string, source, sourceOrderID *string) (*models.Code, error)
 	List(ctx context.Context, status string) ([]*models.Code, error)
+	ListRecentClaimsByUserID(ctx context.Context, userID string, limit int) ([]models.PublicClaim, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Code, error)
 	Update(ctx context.Context, id uuid.UUID, patch CodePatch) (*models.Code, error)
 	ReportDead(ctx context.Context, id uuid.UUID) error
@@ -143,6 +144,34 @@ func (r *PostgresCodeRepository) List(ctx context.Context, status string) ([]*mo
 		codes = append(codes, &c)
 	}
 	return codes, rows.Err()
+}
+
+func (r *PostgresCodeRepository) ListRecentClaimsByUserID(ctx context.Context, userID string, limit int) ([]models.PublicClaim, error) {
+	if limit < 1 {
+		limit = 12
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT c.game_id, g.name, g.header_image_url, c.code_type, c.claimed_at
+		FROM codes c
+		JOIN games g ON g.id = c.game_id
+		WHERE c.claimed_by_user_id = $1 AND c.status = 'claimed' AND c.claimed_at IS NOT NULL
+		ORDER BY c.claimed_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]models.PublicClaim, 0)
+	for rows.Next() {
+		var c models.PublicClaim
+		if err := rows.Scan(&c.GameID, &c.GameName, &c.HeaderImageURL, &c.CodeType, &c.ClaimedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresCodeRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Code, error) {

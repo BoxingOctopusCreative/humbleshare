@@ -11,9 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// ObjectStore uploads and deletes opaque objects (avatars).
+// ObjectStore uploads, downloads, and deletes opaque objects (avatars/banners).
 type ObjectStore interface {
 	Put(ctx context.Context, key string, body io.Reader, contentType string, size int64) error
+	Get(ctx context.Context, key string) (body io.ReadCloser, contentType string, size int64, err error)
 	Delete(ctx context.Context, key string) error
 }
 
@@ -79,6 +80,25 @@ func (r *R2) Put(ctx context.Context, key string, body io.Reader, contentType st
 		return fmt.Errorf("r2 put %s: %w", key, err)
 	}
 	return nil
+}
+
+func (r *R2) Get(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {
+	out, err := r.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("r2 get %s: %w", key, err)
+	}
+	ct := "application/octet-stream"
+	if out.ContentType != nil && *out.ContentType != "" {
+		ct = *out.ContentType
+	}
+	var size int64
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, ct, size, nil
 }
 
 func (r *R2) Delete(ctx context.Context, key string) error {

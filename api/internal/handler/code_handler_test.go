@@ -28,6 +28,9 @@ func (s *claimStubRepo) Create(context.Context, uuid.UUID, string, string, *stri
 	return nil, nil
 }
 func (s *claimStubRepo) List(context.Context, string) ([]*models.Code, error) { return nil, nil }
+func (s *claimStubRepo) ListRecentClaimsByUserID(context.Context, string, int) ([]models.PublicClaim, error) {
+	return nil, nil
+}
 func (s *claimStubRepo) GetByID(context.Context, uuid.UUID) (*models.Code, error) {
 	return nil, repository.ErrCodeNotFound
 }

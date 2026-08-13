@@ -133,6 +133,7 @@ func Load(filesystem afero.Fs, opts *LoadOptions) (Config, error) {
 		R2UserAssetsPublicBaseURL: mergeString(
 			"R2_USER_ASSETS_PUBLIC_BASE_URL", "", fc.R2.UserAssetsPublicBaseURL, inf, "",
 		),
+		MediaProxySecret: mergeString("MEDIA_PROXY_SECRET", "", "", inf, ""),
 		ClaimRateLimitPerMinute: mergePositiveInt(
 			"CLAIM_RATE_LIMIT_PER_MINUTE",
 			fc.Steam.ClaimRateLimitPerMinute,

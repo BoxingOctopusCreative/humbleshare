@@ -12,6 +12,7 @@ import (
 	"github.com/boxingoctopus/humbleshare/api/internal/humble"
 	"github.com/boxingoctopus/humbleshare/api/internal/mailer"
 	"github.com/boxingoctopus/humbleshare/api/internal/mailgun"
+	"github.com/boxingoctopus/humbleshare/api/internal/media"
 	"github.com/boxingoctopus/humbleshare/api/internal/middleware"
 	"github.com/boxingoctopus/humbleshare/api/internal/migrate"
 	"github.com/boxingoctopus/humbleshare/api/internal/repository"
@@ -161,6 +162,7 @@ func runAPI(cfg config.Config) error {
 	codeSvc := service.NewCodeService(codeRepo)
 	gameSvc := service.NewGameService(gameRepo)
 	adminSvc := service.NewAdminService(codeRepo, gameRepo, statsRepo)
+	profileSvc := service.NewProfileService(userRepo, codeRepo, cfg.PublicWebBaseURL, cfg.R2UserAssetsPublicBaseURL)
 
 	cacheTTL := time.Duration(cfg.SteamMetadataCacheTTLSeconds) * time.Second
 	steamClient := steam.NewClient(cfg.SteamRatePerSecond, cacheTTL, gameRepo)
@@ -173,8 +175,12 @@ func runAPI(cfg config.Config) error {
 	codeH := handler.NewCodeHandler(codeSvc)
 	adminH := handler.NewAdminHandler(adminSvc, humbleSvc, steamClient)
 	authH := handler.NewAuthHandler(authSvc, oauthSvc, cfg.CookieSecure, cfg.SessionMaxAge)
+	profileH := handler.NewProfileHandler(profileSvc)
+	mediaHosts := media.AllowedHosts(append([]string{cfg.PublicWebBaseURL}, cfg.CORSOrigins...)...)
+	mediaH := handler.NewMediaHandler(userAssetsStore, mediaHosts, cfg.MediaProxySecret)
 
 	requireSession := middleware.RequireSession(authSvc)
+	optionalSession := middleware.OptionalSession(authSvc)
 	requireAdmin := middleware.RequireAdmin(authSvc)
 	requireSuper := middleware.RequireSuperadmin(authSvc)
 	claimLimiter := middleware.ClaimRateLimiter(cfg.ClaimRateLimitPerMinute)
@@ -225,6 +231,9 @@ func runAPI(cfg config.Config) error {
 	v1.Get("/auth/oauth/:provider/callback", authH.OAuthCallback)
 	v1.Get("/auth/access-requests/:id/approve", authH.ApproveAccessRequest)
 
+	v1.Get("/profiles/:slug", optionalSession, profileH.Get)
+	v1.Get("/media/:kind/:name", mediaH.Get)
+
 	// Auth (session).
 	me := v1.Group("", requireSession)
 	me.Post("/auth/logout", authH.Logout)
@@ -232,6 +241,8 @@ func runAPI(cfg config.Config) error {
 	me.Patch("/me", authH.UpdateProfile)
 	me.Post("/me/avatar", authH.UploadAvatar)
 	me.Delete("/me/avatar", authH.DeleteAvatar)
+	me.Post("/me/banner", authH.UploadBanner)
+	me.Delete("/me/banner", authH.DeleteBanner)
 	me.Post("/me/password", authH.ChangePassword)
 	me.Post("/me/2fa/setup", authH.Setup2FA)
 	me.Post("/me/2fa/enable", authH.Enable2FA)

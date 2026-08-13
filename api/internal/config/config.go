@@ -45,6 +45,7 @@ type Config struct {
 	R2PublicBaseURL             string // public CDN for static bucket
 	R2UserAssetsBucket          string // user uploads (avatars)
 	R2UserAssetsPublicBaseURL   string // public CDN for user-assets bucket
+	MediaProxySecret            string // shared secret for web→API media proxy bypass
 
 	ClaimRateLimitPerMinute int
 

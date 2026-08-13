@@ -14,6 +14,7 @@ import (
 var (
 	ErrUserNotFound    = errors.New("user not found")
 	ErrUserEmailTaken  = errors.New("email already registered")
+	ErrProfileSlugTaken = errors.New("profile slug already taken")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrInviteNotFound  = errors.New("invite not found")
 	ErrInviteConsumed  = errors.New("invite already used")
@@ -22,14 +23,16 @@ var (
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, email, passwordHash, displayName, role string) (*models.User, error)
+	Create(ctx context.Context, email, passwordHash, displayName, role, profileSlug string) (*models.User, error)
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	GetByProfileSlug(ctx context.Context, slug string) (*models.User, error)
 	List(ctx context.Context) ([]models.User, error)
 	ListAdminEmails(ctx context.Context) ([]string, error)
 	UpdatePassword(ctx context.Context, id, passwordHash string) error
-	UpdateProfile(ctx context.Context, id, displayName, bio, steamGamertag, discordTag string) error
+	UpdateProfile(ctx context.Context, id, displayName, bio, steamGamertag, discordTag, profileSlug string, profilePublic bool) error
 	UpdateAvatarURL(ctx context.Context, id, avatarURL string) error
+	UpdateBannerURL(ctx context.Context, id, bannerURL string) error
 	UpdateRole(ctx context.Context, id, role string) error
 	SetTwoFactorSecret(ctx context.Context, id, secret string) error
 	EnableTwoFactor(ctx context.Context, id string) error
@@ -79,6 +82,7 @@ func scanUser(row pgx.Row) (*models.User, error) {
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName,
 		&u.Bio, &u.SteamGamertag, &u.DiscordTag, &u.AvatarURL,
+		&u.BannerURL, &u.ProfileSlug, &u.ProfilePublic,
 		&u.Role, &u.TwoFactorEnabled, &u.TwoFactorSecret, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -90,17 +94,30 @@ func scanUser(row pgx.Row) (*models.User, error) {
 	return &u, nil
 }
 
-const userCols = `id, email, password_hash, display_name, bio, steam_gamertag, discord_tag, avatar_url, role, two_factor_enabled, two_factor_secret, created_at, updated_at`
+func scanUserFields(dest *models.User) []any {
+	return []any{
+		&dest.ID, &dest.Email, &dest.PasswordHash, &dest.DisplayName,
+		&dest.Bio, &dest.SteamGamertag, &dest.DiscordTag, &dest.AvatarURL,
+		&dest.BannerURL, &dest.ProfileSlug, &dest.ProfilePublic,
+		&dest.Role, &dest.TwoFactorEnabled, &dest.TwoFactorSecret, &dest.CreatedAt, &dest.UpdatedAt,
+	}
+}
 
-func (r *PostgresUserRepository) Create(ctx context.Context, email, passwordHash, displayName, role string) (*models.User, error) {
+const userCols = `id, email, password_hash, display_name, bio, steam_gamertag, discord_tag, avatar_url, banner_url, profile_slug, profile_public, role, two_factor_enabled, two_factor_secret, created_at, updated_at`
+
+func (r *PostgresUserRepository) Create(ctx context.Context, email, passwordHash, displayName, role, profileSlug string) (*models.User, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
+	profileSlug = strings.TrimSpace(strings.ToLower(profileSlug))
 	row := r.pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role)
-		VALUES ($1, $2, $3, $4)
-		RETURNING `+userCols, email, passwordHash, displayName, role)
+		INSERT INTO users (email, password_hash, display_name, role, profile_slug)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING `+userCols, email, passwordHash, displayName, role, profileSlug)
 	u, err := scanUser(row)
 	if err != nil && strings.Contains(err.Error(), "idx_users_email_lower") {
 		return nil, ErrUserEmailTaken
+	}
+	if err != nil && strings.Contains(err.Error(), "idx_users_profile_slug") {
+		return nil, ErrProfileSlugTaken
 	}
 	return u, err
 }
@@ -114,6 +131,14 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 	return scanUser(r.pool.QueryRow(ctx, `SELECT `+userCols+` FROM users WHERE lower(email) = $1`, email))
 }
 
+func (r *PostgresUserRepository) GetByProfileSlug(ctx context.Context, slug string) (*models.User, error) {
+	slug = strings.TrimSpace(strings.ToLower(slug))
+	if slug == "" {
+		return nil, ErrUserNotFound
+	}
+	return scanUser(r.pool.QueryRow(ctx, `SELECT `+userCols+` FROM users WHERE profile_slug = $1`, slug))
+}
+
 func (r *PostgresUserRepository) List(ctx context.Context) ([]models.User, error) {
 	rows, err := r.pool.Query(ctx, `SELECT `+userCols+` FROM users ORDER BY created_at ASC`)
 	if err != nil {
@@ -123,11 +148,7 @@ func (r *PostgresUserRepository) List(ctx context.Context) ([]models.User, error
 	var out []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(
-			&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName,
-			&u.Bio, &u.SteamGamertag, &u.DiscordTag, &u.AvatarURL,
-			&u.Role, &u.TwoFactorEnabled, &u.TwoFactorSecret, &u.CreatedAt, &u.UpdatedAt,
-		); err != nil {
+		if err := rows.Scan(scanUserFields(&u)...); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -164,16 +185,21 @@ func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, id, passwor
 	return nil
 }
 
-func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, id, displayName, bio, steamGamertag, discordTag string) error {
+func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, id, displayName, bio, steamGamertag, discordTag, profileSlug string, profilePublic bool) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE users SET
 			display_name = $2,
 			bio = $3,
 			steam_gamertag = $4,
 			discord_tag = $5,
+			profile_slug = $6,
+			profile_public = $7,
 			updated_at = NOW()
-		WHERE id = $1`, id, displayName, bio, steamGamertag, discordTag)
+		WHERE id = $1`, id, displayName, bio, steamGamertag, discordTag, profileSlug, profilePublic)
 	if err != nil {
+		if strings.Contains(err.Error(), "idx_users_profile_slug") {
+			return ErrProfileSlugTaken
+		}
 		return err
 	}
 	if tag.RowsAffected() == 0 {
@@ -184,6 +210,17 @@ func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, id, displayN
 
 func (r *PostgresUserRepository) UpdateAvatarURL(ctx context.Context, id, avatarURL string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1`, id, avatarURL)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *PostgresUserRepository) UpdateBannerURL(ctx context.Context, id, bannerURL string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE users SET banner_url = $2, updated_at = NOW() WHERE id = $1`, id, bannerURL)
 	if err != nil {
 		return err
 	}

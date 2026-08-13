@@ -66,10 +66,14 @@ func mapAuthErr(err error) error {
 		errors.Is(err, service.ErrTwoFactorAlreadyOn),
 		errors.Is(err, service.ErrOAuthNotLinked),
 		errors.Is(err, service.ErrInvalidProfile),
-		errors.Is(err, service.ErrInvalidAvatar):
+		errors.Is(err, service.ErrInvalidAvatar),
+		errors.Is(err, service.ErrInvalidBanner),
+		errors.Is(err, service.ErrSlugTaken):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrAvatarStorageUnset):
 		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, service.ErrProfileNotFound):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	default:
 		return httpx.ServiceError(fiber.StatusInternalServerError, err)
 	}
@@ -116,7 +120,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return mapAuthErr(err)
 	}
 	h.setSessionCookie(c, raw)
-	return c.Status(fiber.StatusCreated).JSON(u)
+	return c.Status(fiber.StatusCreated).JSON(h.auth.PresentUser(u))
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -135,7 +139,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"requires_2fa": true, "pending_token": res.Pending2FAToken})
 	}
 	h.setSessionCookie(c, res.RawSessionToken)
-	return c.JSON(res.User)
+	return c.JSON(h.auth.PresentUser(res.User))
 }
 
 func (h *AuthHandler) Login2FA(c *fiber.Ctx) error {
@@ -151,7 +155,7 @@ func (h *AuthHandler) Login2FA(c *fiber.Ctx) error {
 		return mapAuthErr(err)
 	}
 	h.setSessionCookie(c, res.RawSessionToken)
-	return c.JSON(res.User)
+	return c.JSON(h.auth.PresentUser(res.User))
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
@@ -166,7 +170,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	u := middleware.UserFromLocals(c)
-	return c.JSON(u)
+	return c.JSON(h.auth.PresentUser(u))
 }
 
 func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
@@ -191,15 +195,17 @@ func (h *AuthHandler) UpdateProfile(c *fiber.Ctx) error {
 		Bio           string `json:"bio"`
 		SteamGamertag string `json:"steam_gamertag"`
 		DiscordTag    string `json:"discord_tag"`
+		ProfileSlug   string `json:"profile_slug"`
+		ProfilePublic bool   `json:"profile_public"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
-	updated, err := h.auth.UpdateProfile(c.Context(), u.ID, body.DisplayName, body.Bio, body.SteamGamertag, body.DiscordTag)
+	updated, err := h.auth.UpdateProfile(c.Context(), u.ID, body.DisplayName, body.Bio, body.SteamGamertag, body.DiscordTag, body.ProfileSlug, body.ProfilePublic)
 	if err != nil {
 		return mapAuthErr(err)
 	}
-	return c.JSON(updated)
+	return c.JSON(h.auth.PresentUser(updated))
 }
 
 func (h *AuthHandler) UploadAvatar(c *fiber.Ctx) error {
@@ -224,7 +230,7 @@ func (h *AuthHandler) UploadAvatar(c *fiber.Ctx) error {
 	if err != nil {
 		return mapAuthErr(err)
 	}
-	return c.JSON(updated)
+	return c.JSON(h.auth.PresentUser(updated))
 }
 
 func (h *AuthHandler) DeleteAvatar(c *fiber.Ctx) error {
@@ -233,7 +239,41 @@ func (h *AuthHandler) DeleteAvatar(c *fiber.Ctx) error {
 	if err != nil {
 		return mapAuthErr(err)
 	}
-	return c.JSON(updated)
+	return c.JSON(h.auth.PresentUser(updated))
+}
+
+func (h *AuthHandler) UploadBanner(c *fiber.Ctx) error {
+	u := middleware.UserFromLocals(c)
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "file is required")
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "unable to read file")
+	}
+	defer f.Close()
+	const maxRead = 4*1024*1024 + 1
+	buf := make([]byte, maxRead)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return fiber.NewError(fiber.StatusBadRequest, "unable to read file")
+	}
+	data := buf[:n]
+	updated, err := h.auth.UploadBanner(c.Context(), u.ID, data)
+	if err != nil {
+		return mapAuthErr(err)
+	}
+	return c.JSON(h.auth.PresentUser(updated))
+}
+
+func (h *AuthHandler) DeleteBanner(c *fiber.Ctx) error {
+	u := middleware.UserFromLocals(c)
+	updated, err := h.auth.DeleteBanner(c.Context(), u.ID)
+	if err != nil {
+		return mapAuthErr(err)
+	}
+	return c.JSON(h.auth.PresentUser(updated))
 }
 
 func (h *AuthHandler) Setup2FA(c *fiber.Ctx) error {

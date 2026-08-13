@@ -6,8 +6,32 @@ export type User = {
 	steam_gamertag: string;
 	discord_tag: string;
 	avatar_url: string;
+	banner_url: string;
+	profile_slug: string;
+	profile_public: boolean;
 	role: string;
 	two_factor_enabled: boolean;
+};
+
+export type PublicClaim = {
+	game_id: string;
+	game_name: string;
+	header_image_url?: string | null;
+	code_type: string;
+	claimed_at: string;
+};
+
+export type PublicProfile = {
+	profile_slug: string;
+	display_name: string;
+	bio: string;
+	steam_gamertag: string;
+	discord_tag: string;
+	avatar_url: string;
+	banner_url: string;
+	profile_public: boolean;
+	recent_claims: PublicClaim[];
+	is_owner: boolean;
 };
 
 export type AccessRequest = {

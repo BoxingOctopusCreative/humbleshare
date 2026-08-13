@@ -15,6 +15,24 @@ const (
 	LocalsUserKey     = "user"
 )
 
+// OptionalSession loads the user when a session cookie or Bearer token is present.
+// Missing or invalid sessions are ignored (never 401).
+func OptionalSession(auth *service.AuthService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		raw := extractSessionToken(c)
+		if raw == "" {
+			return c.Next()
+		}
+		u, err := auth.UserFromSession(c.Context(), raw)
+		if err != nil {
+			return c.Next()
+		}
+		c.Locals(LocalsUserKey, u)
+		c.Locals("session_token", raw)
+		return c.Next()
+	}
+}
+
 // RequireSession loads the user from the session cookie or Bearer token.
 func RequireSession(auth *service.AuthService) fiber.Handler {
 	return func(c *fiber.Ctx) error {

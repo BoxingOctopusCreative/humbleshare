@@ -30,6 +30,9 @@ func (s *stubCodeRepo) Create(ctx context.Context, gameID uuid.UUID, codeValue, 
 	return &models.Code{ID: uuid.New(), GameID: gameID, CodeValue: codeValue, CodeType: codeType}, nil
 }
 func (s *stubCodeRepo) List(context.Context, string) ([]*models.Code, error) { return nil, nil }
+func (s *stubCodeRepo) ListRecentClaimsByUserID(context.Context, string, int) ([]models.PublicClaim, error) {
+	return nil, nil
+}
 func (s *stubCodeRepo) GetByID(context.Context, uuid.UUID) (*models.Code, error) {
 	return nil, repository.ErrCodeNotFound
 }

@@ -25,6 +25,9 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 						steam_gamertag: user.steam_gamertag ?? '',
 						discord_tag: user.discord_tag ?? '',
 						avatar_url: user.avatar_url ?? '',
+						banner_url: user.banner_url ?? '',
+						profile_slug: user.profile_slug ?? '',
+						profile_public: Boolean(user.profile_public),
 						role: user.role,
 						two_factor_enabled: user.two_factor_enabled
 					}

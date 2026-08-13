@@ -4,6 +4,7 @@
 	type MenuUser = {
 		display_name: string;
 		avatar_url?: string;
+		profile_slug?: string;
 	};
 
 	let { user }: { user: MenuUser } = $props();
@@ -61,11 +62,21 @@
 		{/if}
 	</button>
 
-	{#if open}
+		{#if open}
 		<div
 			role="menu"
 			class="absolute right-0 z-30 mt-2 min-w-40 overflow-hidden rounded border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg"
 		>
+			{#if user.profile_slug}
+				<a
+					role="menuitem"
+					href={resolve('/u/[slug]', { slug: user.profile_slug })}
+					class="block px-3 py-2 text-sm text-[var(--color-text)] no-underline hover:bg-[var(--color-surface-2)] hover:no-underline"
+					onclick={close}
+				>
+					View profile
+				</a>
+			{/if}
 			<a
 				role="menuitem"
 				href={resolve('/settings')}
