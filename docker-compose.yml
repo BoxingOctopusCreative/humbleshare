@@ -1,0 +1,128 @@
+services:
+  api:
+    image: ghcr.io/boxingoctopuscreative/humbleshare-api:latest
+    networks:
+      shared-network:
+        ipv4_address: 10.0.0.100
+    environment:
+      HTTP_ADDR: ":8080"
+      CORS_ORIGINS: "https://humbleshare.boxingoctopus.io"
+      # Infisical Machine Identity (Universal Auth). When set, API loads /api recursively.
+      # Env vars below remain overrides (precedence: env > cli > toml > infisical > defaults).
+      INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: $INFISICAL_UNIVERSAL_AUTH_CLIENT_ID
+      INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET: $INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+      INFISICAL_PROJECT_ID: $INFISICAL_PROJECT_ID
+      INFISICAL_ENVIRONMENT: $INFISICAL_ENVIRONMENT
+      INFISICAL_SITE_URL: ${INFISICAL_SITE_URL:-https://app.infisical.com}
+      # INFISICAL_SECRET_PATH: /api
+      SESSION_MAX_AGE_SECONDS: 2592000
+      COOKIE_SECURE: true
+      PUBLIC_WEB_BASE_URL: https://humbleshare.boxingoctopus.io
+      # Optional overrides when not using Infisical /api/auth and /api/db:
+      AUTH_JWT_SECRET: $AUTH_JWT_SECRET
+      SUPERADMIN_EMAIL: $SUPERADMIN_EMAIL
+      DATABASE_URL: $DATABASE_URL
+      MAILGUN_API_KEY: $MAILGUN_API_KEY
+      MAILGUN_DOMAIN: $MAILGUN_DOMAIN
+      MAILGUN_FROM: $MAILGUN_FROM
+      GOOGLE_OAUTH_CLIENT_ID: $GOOGLE_OAUTH_CLIENT_ID
+      GOOGLE_OAUTH_CLIENT_SECRET: $GOOGLE_OAUTH_CLIENT_SECRET
+      DISCORD_OAUTH_CLIENT_ID: $DISCORD_OAUTH_CLIENT_ID
+      DISCORD_OAUTH_CLIENT_SECRET: $DISCORD_OAUTH_CLIENT_SECRET
+      STEAM_API_KEY: $STEAM_API_KEY
+    # Alpine base: BusyBox nc + printf (no curl/wget in image). $$ is a literal $ for Compose.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "printf $$'GET /health HTTP/1.0\\r\\n\\r\\n' | nc -w 3 127.0.0.1 8080 | grep -qE 'HTTP/[0-9.]+ 200' || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=shared-network
+      # Beats humbleshare-web (priority 1). Service name defaults to humbleshare-api (must match services.* below).
+      - traefik.http.routers.humbleshare-api.rule=Host(`humbleshare.boxingoctopus.io`) && (PathPrefix(`/api`) || Path(`/health`) || PathPrefix(`/webhooks`))
+      - traefik.http.routers.humbleshare-api.priority=100
+      - traefik.http.routers.humbleshare-api.tls=true
+      - traefik.http.routers.humbleshare-api.entrypoints=websecure
+      - traefik.http.routers.humbleshare-api.tls.certresolver=leresolver
+      - traefik.http.services.humbleshare-api.loadbalancer.server.port=8080
+      - traefik.http.middlewares.humbleshare-api.headers.SSLRedirect=true
+      - traefik.http.middlewares.humbleshare-api.headers.STSSeconds=315360000
+      - traefik.http.middlewares.humbleshare-api.headers.browserXSSFilter=true
+      - traefik.http.middlewares.humbleshare-api.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.humbleshare-api.headers.forceSTSHeader=true
+      - traefik.http.middlewares.humbleshare-api.headers.SSLHost=humbleshare.boxingoctopus.io
+      - traefik.http.middlewares.humbleshare-api.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.humbleshare-api.headers.STSPreload=true
+      - wud.watch=true
+      - wud.tag.include=^\d+\.\d+\.\d+$      # only track real semver tags
+      - wud.trigger.include=docker.autoupdate
+
+  web:
+    image: ghcr.io/boxingoctopuscreative/humbleshare-web:latest
+    networks:
+      shared-network:
+        ipv4_address: 10.0.0.101
+    environment:
+      # Infisical Machine Identity (Universal Auth). When set, web loads /ui recursively.
+      # Env vars below remain overrides.
+      INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: $INFISICAL_UNIVERSAL_AUTH_CLIENT_ID
+      INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET: $INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+      INFISICAL_PROJECT_ID: $INFISICAL_PROJECT_ID
+      INFISICAL_ENVIRONMENT: $INFISICAL_ENVIRONMENT
+      INFISICAL_SITE_URL: ${INFISICAL_SITE_URL:-https://app.infisical.com}
+      # INFISICAL_SECRET_PATH: /ui
+      # Runtime BFF target for same-origin /api/* (SvelteKit server routes). Prefer Infisical /ui/api.
+      API_INTERNAL_URL: http://10.0.0.100:8080
+      COOKIE_SECURE: "true"
+      PUBLIC_WEB_BASE_URL: https://humbleshare.boxingoctopus.io
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      - api
+    # Node is always present: built-in http client (no curl/wget in image).
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/',(r)=>{r.resume();r.on('end',()=>process.exit(r.statusCode>=200&&r.statusCode<400?0:1));}).on('error',()=>process.exit(1));",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=shared-network
+      - traefik.http.routers.humbleshare-web.rule=Host(`humbleshare.boxingoctopus.io`) && !PathPrefix(`/api`) && !Path(`/health`) && !PathPrefix(`/webhooks`)
+      - traefik.http.routers.humbleshare-web.priority=1
+      - traefik.http.routers.humbleshare-web.service=humbleshare-web
+      - traefik.http.routers.humbleshare-web.tls=true
+      - traefik.http.routers.humbleshare-web.entrypoints=websecure
+      - traefik.http.routers.humbleshare-web.tls.certresolver=leresolver
+      - traefik.http.services.humbleshare-web.loadbalancer.server.port=3000
+      - traefik.http.middlewares.humbleshare-web.headers.SSLRedirect=true
+      - traefik.http.middlewares.humbleshare-web.headers.STSSeconds=315360000
+      - traefik.http.middlewares.humbleshare-web.headers.browserXSSFilter=true
+      - traefik.http.middlewares.humbleshare-web.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.humbleshare-web.headers.forceSTSHeader=true
+      - traefik.http.middlewares.humbleshare-web.headers.SSLHost=humbleshare.boxingoctopus.io
+      - traefik.http.middlewares.humbleshare-web.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.humbleshare-web.headers.STSPreload=true
+      - wud.watch=true
+      - wud.tag.include=^\d+\.\d+\.\d+$      # only track real semver tags
+      - wud.trigger.include=docker.autoupdate
+
+networks:
+  shared-network:
+    external: true

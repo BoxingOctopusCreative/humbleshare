@@ -1,0 +1,15 @@
+# HumbleShare robots
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /terms
+Allow: /sitemap
+Allow: /login
+Allow: /request-access
+Disallow: /admin
+Disallow: /settings
+Disallow: /games
+Disallow: /api/
+Disallow: /invite/
+
+Sitemap: /sitemap.xml

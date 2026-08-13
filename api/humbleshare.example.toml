@@ -1,0 +1,70 @@
+# HumbleShare API — example configuration file.
+# Copy to humbleshare.toml (gitignored) and fill in your values.
+# Precedence: env vars > CLI flags > this file > Infisical > built-in defaults.
+# Prefer Infisical (/api recursively) for secrets in production.
+# Required (any layer): DATABASE_URL, AUTH_JWT_SECRET, SUPERADMIN_EMAIL
+
+[server]
+http_addr = ":8080"
+
+[database]
+# url = "postgres://user:pass@localhost:5432/humbleshare?sslmode=disable"
+
+[cors]
+origins = ["http://localhost:3000"]
+
+[auth]
+# jwt_secret = "change-me-long-random-string"
+# superadmin_email = "you@example.com"
+# Infisical: /api/auth → superadmin_password (or /api/auth/superadmin_password → password)
+# superadmin_password = ""
+cookie_secure = false
+session_max_age_seconds = 2592000
+# public_web_base_url = "https://share.example.com"
+
+[mailgun]
+# api_key = ""
+# domain = ""
+# from = "HumbleShare <noreply@example.com>"
+# api_base = "https://api.mailgun.net"
+
+[smtp]
+# Local Mailpit (preferred in docker-compose.dev.yml). When host is set, Mailgun is ignored.
+# host = "localhost"
+# port = "1025"
+# from = "HumbleShare <noreply@localhost>"
+
+[oauth]
+# google_client_id = ""
+# google_client_secret = ""
+# discord_client_id = ""
+# discord_client_secret = ""
+# steam_api_key = ""
+
+[turnstile]
+# Infisical: /api/auth/turnstile
+# site_key = ""
+# secret_key = ""
+
+[r2]
+# Infisical: /api/r2 (shared credentials; two buckets like Kurator)
+# account_id = ""
+# access_key_id = ""
+# secret_access_key = ""
+# Static assets (brand, openapi, etc.)
+# bucket = "humbleshare-static"
+# public_base_url = "https://static.example.com"
+# User uploads (avatars)
+# user_assets_bucket = "humbleshare-user-assets"
+# user_assets_public_base_url = "https://userassets.example.com"
+
+[steam]
+rate_per_second = 1.0
+metadata_cache_ttl_seconds = 604800
+claim_rate_limit_per_minute = 10
+
+# [sentry]
+# dsn = "https://...@o....ingest.de.sentry.io/..."
+# environment = "production"
+# release = "humbleshare-api@1.0.0"
+# traces_sample_rate = 0.2

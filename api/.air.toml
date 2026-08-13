@@ -1,0 +1,25 @@
+#:schema https://json.schemastore.org/any.json
+# Live reload for local API development (https://github.com/air-verse/air).
+# Run from api/: `air` or `make dev`
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -trimpath -o ./tmp/humbleshare-api ./cmd/api"
+  bin = "./tmp/humbleshare-api"
+  include_ext = ["go", "tpl", "tmpl", "html", "toml"]
+  exclude_dir = ["tmp", "bin", "vendor", "testdata"]
+  exclude_regex = ["_test\\.go$"]
+  exclude_unchanged = true
+  delay = 500
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true
+  keep_scroll = true

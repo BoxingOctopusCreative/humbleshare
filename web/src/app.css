@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+@theme {
+	--font-sans: 'komet', sans-serif;
+	--font-sc: 'komet-sc', sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+	--font-logo: 'chonky-poster', sans-serif;
+
+	/* Kit only ships 400 + 700; map common Tailwind weights to those. */
+	--font-weight-medium: 700;
+	--font-weight-semibold: 700;
+	--font-weight-bold: 700;
+
+	--color-bg: #0f1216;
+	--color-surface: #171b22;
+	--color-surface-2: #1e242e;
+	--color-border: #2a3340;
+	--color-text: #e8edf4;
+	--color-muted: #8b97a8;
+	--color-logo: #cc272d;
+	--color-accent: #cc272d;
+	--color-accent-dim: #9a1d21;
+	--color-admin: #e8a23a;
+	--color-admin-dim: #a87020;
+	--color-danger: #e85d5d;
+	--color-ok: #4caf82;
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+		background:
+			radial-gradient(ellipse 80% 50% at 20% -10%, rgba(204, 39, 45, 0.14), transparent),
+			radial-gradient(ellipse 60% 40% at 90% 0%, rgba(232, 162, 58, 0.06), transparent),
+			var(--color-bg);
+		color: var(--color-text);
+		font-family: var(--font-sans);
+		font-weight: 400;
+		font-style: normal;
+	}
+
+	a {
+		color: var(--color-accent);
+		text-decoration: none;
+	}
+
+	a:hover {
+		text-decoration: underline;
+	}
+
+	button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.font-logo {
+		-webkit-text-stroke: 0.5px rgba(255, 255, 255, 0.45);
+		paint-order: stroke fill;
+		text-shadow:
+			0 2px 0 rgba(0, 0, 0, 0.45),
+			0 4px 12px rgba(0, 0, 0, 0.35);
+	}
+}

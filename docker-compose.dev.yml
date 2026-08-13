@@ -1,0 +1,143 @@
+# Local development: Traefik + Postgres + API (air) + web (Vite HMR) + Mailpit.
+# From repo root: docker compose -f docker-compose.dev.yml up --build
+#
+# App (same path split as production Traefik): http://humbleshare.localhost
+#   /api/v1, /health, /webhooks → api
+#   everything else → web BFF (Vite)
+# Traefik dashboard: http://localhost:8081
+# Mailpit: http://localhost:8025
+#
+# Hot reload mounts api/ and web/. Set AUTH_JWT_SECRET / SUPERADMIN_EMAIL in .env.
+
+name: humbleshare-dev
+
+services:
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=humbleshare-dev
+      - --entrypoints.web.address=:80
+      - --log.level=INFO
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: humbleshare
+      POSTGRES_PASSWORD: humbleshare
+      POSTGRES_DB: humbleshare
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - humbleshare_dev_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U humbleshare -d humbleshare"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - proxy
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    networks:
+      - proxy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    environment:
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: postgres://humbleshare:humbleshare@postgres:5432/humbleshare?sslmode=disable
+      CORS_ORIGINS: http://humbleshare.localhost,http://localhost
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-jwt-secret-change-me-to-a-long-random-string}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-you@example.com}
+      COOKIE_SECURE: "false"
+      SESSION_MAX_AGE_SECONDS: "2592000"
+      PUBLIC_WEB_BASE_URL: http://humbleshare.localhost
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: HumbleShare <noreply@localhost>
+    volumes:
+      - ./api:/src
+      - api_go_mod_cache:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      traefik:
+        condition: service_started
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=humbleshare-dev
+      # Same router names / priorities as production. Local uses /api/v1 (Go mounts)
+      # so the SvelteKit BFF under /api/* (non-v1) still reaches web.
+      - traefik.http.routers.humbleshare-api.rule=Host(`humbleshare.localhost`) && (PathPrefix(`/api/v1`) || Path(`/health`) || PathPrefix(`/webhooks`))
+      - traefik.http.routers.humbleshare-api.priority=100
+      - traefik.http.routers.humbleshare-api.entrypoints=web
+      - traefik.http.services.humbleshare-api.loadbalancer.server.port=8080
+      - traefik.http.middlewares.humbleshare-api.headers.browserXSSFilter=true
+      - traefik.http.middlewares.humbleshare-api.headers.contentTypeNosniff=true
+      - traefik.http.routers.humbleshare-api.middlewares=humbleshare-api
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    environment:
+      API_INTERNAL_URL: http://api:8080
+      COOKIE_SECURE: "false"
+      PUBLIC_WEB_BASE_URL: http://humbleshare.localhost
+      # Vite HMR websocket through Traefik (:80).
+      HMR_HOST: humbleshare.localhost
+      HMR_CLIENT_PORT: "${TRAEFIK_HTTP_PORT:-80}"
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+    depends_on:
+      - api
+      - traefik
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=humbleshare-dev
+      - traefik.http.routers.humbleshare-web.rule=Host(`humbleshare.localhost`) && !PathPrefix(`/api/v1`) && !Path(`/health`) && !PathPrefix(`/webhooks`)
+      - traefik.http.routers.humbleshare-web.priority=1
+      - traefik.http.routers.humbleshare-web.service=humbleshare-web
+      - traefik.http.routers.humbleshare-web.entrypoints=web
+      - traefik.http.services.humbleshare-web.loadbalancer.server.port=5173
+      - traefik.http.middlewares.humbleshare-web.headers.browserXSSFilter=true
+      - traefik.http.middlewares.humbleshare-web.headers.contentTypeNosniff=true
+      - traefik.http.routers.humbleshare-web.middlewares=humbleshare-web
+    restart: unless-stopped
+
+networks:
+  proxy:
+    name: humbleshare-dev
+
+volumes:
+  humbleshare_dev_pg_data:
+  api_go_mod_cache:
+  web_node_modules:

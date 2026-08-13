@@ -1,0 +1,7 @@
+.cursor/
+.claude/
+.vscode/
+.env
+.env.local
+*.pem
+.DS_Store
