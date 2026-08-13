@@ -125,6 +125,7 @@ jobs:
         with:
           name: humbleshare-api-binaries-${{ steps.tag_version.outputs.new_tag }}
           path: dist/humbleshare-api-*
+          retention-days: 1
 
       - name: Set up Docker Buildx
         if: steps.tag_version.outputs.new_tag != ''
