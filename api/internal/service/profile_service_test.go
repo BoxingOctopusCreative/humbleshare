@@ -99,7 +99,7 @@ func TestProfileServiceGetBySlug(t *testing.T) {
 		},
 	}}
 	codes := &profileCodeStub{claims: []models.PublicClaim{claim}}
-	svc := NewProfileService(users, codes, "https://app.example", "https://cdn.example")
+	svc := NewProfileService(users, codes, "https://cdn.example")
 
 	t.Run("public visible to anon", func(t *testing.T) {
 		p, err := svc.GetBySlug(context.Background(), "ryan", nil)

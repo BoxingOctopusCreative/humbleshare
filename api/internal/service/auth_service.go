@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -704,8 +705,8 @@ func (s *AuthService) PresentUser(u *models.User) *models.User {
 		return nil
 	}
 	out := *u
-	out.AvatarURL = media.ProxyURL(s.publicWebBaseURL, s.userAssetsPublicURL, u.AvatarURL)
-	out.BannerURL = media.ProxyURL(s.publicWebBaseURL, s.userAssetsPublicURL, u.BannerURL)
+	out.AvatarURL = media.ProxyURL(s.userAssetsPublicURL, u.AvatarURL)
+	out.BannerURL = media.ProxyURL(s.userAssetsPublicURL, u.BannerURL)
 	return &out
 }
 
@@ -726,23 +727,31 @@ func sniffImage(data []byte) (contentType, ext string, ok bool) {
 }
 
 func objectKeyFromUserAssetURL(publicBase, assetURL, requiredPrefix string) string {
-	publicBase = strings.TrimRight(strings.TrimSpace(publicBase), "/")
 	assetURL = strings.TrimSpace(assetURL)
-	if publicBase == "" || assetURL == "" {
+	if assetURL == "" {
 		return ""
 	}
-	prefix := publicBase + "/"
-	if !strings.HasPrefix(assetURL, prefix) {
-		return ""
+	if u, err := url.Parse(assetURL); err == nil {
+		key := strings.TrimPrefix(u.Path, "/")
+		if userAssetKeyOK(key, requiredPrefix) {
+			return key
+		}
 	}
-	key := strings.TrimPrefix(assetURL, prefix)
+	publicBase = strings.TrimRight(strings.TrimSpace(publicBase), "/")
+	if publicBase != "" && strings.HasPrefix(assetURL, publicBase+"/") {
+		key := strings.TrimPrefix(assetURL, publicBase+"/")
+		if userAssetKeyOK(key, requiredPrefix) {
+			return key
+		}
+	}
+	return ""
+}
+
+func userAssetKeyOK(key, requiredPrefix string) bool {
 	if key == "" || strings.Contains(key, "..") || strings.HasPrefix(key, "/") {
-		return ""
+		return false
 	}
-	if !strings.HasPrefix(key, requiredPrefix) {
-		return ""
-	}
-	return key
+	return strings.HasPrefix(key, requiredPrefix)
 }
 
 // objectKeyFromAvatarURL is kept for tests; prefers avatars/ prefix.

@@ -12,31 +12,38 @@ import (
 )
 
 type MediaHandler struct {
-	objects      storage.ObjectStore
+	userAssets   storage.ObjectStore
+	staticAssets storage.ObjectStore
 	allowedHosts map[string]struct{}
 	proxySecret  string
 }
 
-func NewMediaHandler(objects storage.ObjectStore, allowedHosts map[string]struct{}, proxySecret string) *MediaHandler {
+func NewMediaHandler(userAssets, staticAssets storage.ObjectStore, allowedHosts map[string]struct{}, proxySecret string) *MediaHandler {
 	return &MediaHandler{
-		objects:      objects,
+		userAssets:   userAssets,
+		staticAssets: staticAssets,
 		allowedHosts: allowedHosts,
 		proxySecret:  strings.TrimSpace(proxySecret),
 	}
 }
 
 func (h *MediaHandler) Get(c *fiber.Ctx) error {
-	if h.objects == nil {
-		return fiber.NewError(fiber.StatusNotFound, "not found")
-	}
 	if !h.allowRequest(c) {
 		return fiber.NewError(fiber.StatusForbidden, "hotlink denied")
 	}
-	key, ok := media.ParseObjectKey(c.Params("kind"), c.Params("name"))
+	kind := c.Params("kind")
+	key, ok := media.ParseObjectKey(kind, c.Params("name"))
 	if !ok {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid media path")
 	}
-	body, contentType, size, err := h.objects.Get(c.Context(), key)
+	store := h.userAssets
+	if kind == "svg" {
+		store = h.staticAssets
+	}
+	if store == nil {
+		return fiber.NewError(fiber.StatusNotFound, "not found")
+	}
+	body, contentType, size, err := store.Get(c.Context(), key)
 	if err != nil {
 		if isObjectNotFound(err) {
 			return fiber.NewError(fiber.StatusNotFound, "not found")
@@ -46,6 +53,9 @@ func (h *MediaHandler) Get(c *fiber.Ctx) error {
 	defer body.Close()
 
 	c.Set("Content-Type", contentType)
+	if kind == "svg" {
+		c.Set("Content-Type", "image/svg+xml")
+	}
 	c.Set("Cache-Control", "public, max-age=86400")
 	c.Set("X-Content-Type-Options", "nosniff")
 	if size > 0 {

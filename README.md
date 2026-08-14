@@ -91,8 +91,8 @@ Operational knobs such as `HTTP_ADDR` and `CORS_ORIGINS` stay on env/TOML.
 | `COOKIE_SECURE` | API + Web | `true` in production HTTPS |
 | `SESSION_MAX_AGE_SECONDS` | API | Session cookie max-age (default 30d) |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | API | Shared R2 credentials |
-| `R2_BUCKET` / `R2_PUBLIC_BASE_URL` | API | Static assets bucket + public CDN |
-| `R2_USER_ASSETS_BUCKET` / `R2_USER_ASSETS_PUBLIC_BASE_URL` | API | User uploads (avatars) + public CDN |
+| `R2_BUCKET` / `R2_PUBLIC_BASE_URL` | API | Static assets bucket + public CDN (`https://assets.humbleshare.com`) |
+| `R2_USER_ASSETS_BUCKET` / `R2_USER_ASSETS_PUBLIC_BASE_URL` | API | User uploads (avatars, banners) + public CDN (`https://user-assets.humbleshare.com`) |
 
 ## Auth
 

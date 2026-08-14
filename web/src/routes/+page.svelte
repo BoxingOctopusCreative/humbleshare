@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import SplashBackdrop from '$lib/components/SplashBackdrop.svelte';
 
-	const logoVert = 'https://humbleshare-assets.boxingoctopus.io/SVG/humbleshare_vert.svg';
+	const logoVert = 'https://assets.humbleshare.com/SVG/humbleshare_vert.svg';
 
 	let { data } = $props();
 </script>

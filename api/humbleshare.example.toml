@@ -53,10 +53,10 @@ session_max_age_seconds = 2592000
 # secret_access_key = ""
 # Static assets (brand, openapi, etc.)
 # bucket = "humbleshare-static"
-# public_base_url = "https://static.example.com"
+# public_base_url = "https://assets.humbleshare.com"
 # User uploads (avatars)
 # user_assets_bucket = "humbleshare-user-assets"
-# user_assets_public_base_url = "https://userassets.example.com"
+# user_assets_public_base_url = "https://user-assets.humbleshare.com"
 
 [steam]
 rate_per_second = 1.0

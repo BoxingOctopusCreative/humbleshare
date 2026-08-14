@@ -6,7 +6,7 @@
 <LegalDoc
 	title="Terms of use"
 	description="Rules for using HumbleShare: invite-only access, keys, and acceptable use."
-	updated="August 11, 2026"
+	updated="August 14, 2026"
 >
 	<p>
 		These terms cover use of HumbleShare: a private tool for sharing spare Steam product keys and
@@ -20,8 +20,9 @@
 		helps a small group track spare keys and gift links so each code is claimed once.
 	</p>
 	<p>
-		Humble Bundle, Steam, and other trademarks belong to their owners. HumbleShare is not affiliated
-		with, endorsed by, or sponsored by Humble Bundle, Inc., Valve Corporation, or their partners.
+		Humble Bundle, Steam, IGN, Ziff Davis, and other trademarks belong to their owners. HumbleShare
+		is not affiliated with, endorsed by, or sponsored by Humble Bundle Inc., IGN Entertainment Inc.,
+		Ziff Davis, LLC, Valve Corporation, or their partners.
 	</p>
 
 	<h2>Eligibility and accounts</h2>

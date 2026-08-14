@@ -20,7 +20,12 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 
 	const kind = params.kind;
 	const name = params.name;
-	if ((kind !== 'avatars' && kind !== 'banners') || !name || name.includes('..') || name.includes('/')) {
+	if (
+		(kind !== 'avatars' && kind !== 'banners' && kind !== 'svg') ||
+		!name ||
+		name.includes('..') ||
+		name.includes('/')
+	) {
 		error(400, 'invalid media path');
 	}
 
@@ -29,14 +34,11 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 	if (secret) {
 		headers['X-Humbleshare-Media-Proxy'] = secret;
 	}
-	const ref = request.headers.get('referer');
-	if (ref) headers.Referer = ref;
-	const origin = request.headers.get('origin');
-	if (origin) headers.Origin = origin;
 
-	const upstream = await fetch(`${apiBase()}/api/v1/media/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`, {
-		headers
-	});
+	const upstream = await fetch(
+		`${apiBase()}/api/v1/media/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
+		{ headers }
+	);
 	if (!upstream.ok) {
 		error(upstream.status === 404 ? 404 : upstream.status === 403 ? 403 : 502, 'media unavailable');
 	}

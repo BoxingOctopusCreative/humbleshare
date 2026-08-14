@@ -4,8 +4,8 @@
 	import SentryClientInit from '$lib/components/SentryClientInit.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
 
-	const favicon = 'https://humbleshare-assets.boxingoctopus.io/SVG/favicon.svg';
-	const logoWide = 'https://humbleshare-assets.boxingoctopus.io/SVG/humbleshare_wide.svg';
+	const favicon = 'https://assets.humbleshare.com/SVG/favicon.svg';
+	const logoWide = 'https://assets.humbleshare.com/SVG/humbleshare_wide.svg';
 
 	let { children, data } = $props();
 </script>
@@ -56,24 +56,30 @@
 		class="sticky bottom-0 z-20 shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)]/80 shadow-[0_-4px_16px_rgba(0,0,0,0.25)] backdrop-blur"
 	>
 		<div
-			class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-xs text-[var(--color-muted)]"
+			class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 text-xs text-[var(--color-muted)] sm:py-4"
 		>
-			<span>
-				© {new Date().getFullYear()}
-				<a
-					href="https://boxingoctop.us"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="no-underline hover:underline"
-				>
-					Boxing Octopus Creative
-				</a>
-			</span>
-			<nav class="flex flex-wrap gap-3">
-				<a href={resolve('/privacy')} class="no-underline hover:underline">Privacy</a>
-				<a href={resolve('/terms')} class="no-underline hover:underline">Terms</a>
-				<a href={resolve('/sitemap')} class="no-underline hover:underline">Sitemap</a>
-			</nav>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<span>
+					© {new Date().getFullYear()}
+					<a
+						href="https://boxingoctop.us"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="no-underline hover:underline"
+					>
+						Boxing Octopus Creative
+					</a>
+				</span>
+				<nav class="flex flex-wrap gap-3">
+					<a href={resolve('/privacy')} class="no-underline hover:underline">Privacy</a>
+					<a href={resolve('/terms')} class="no-underline hover:underline">Terms</a>
+					<a href={resolve('/sitemap')} class="no-underline hover:underline">Sitemap</a>
+				</nav>
+			</div>
+			<p class="m-0 max-w-3xl leading-snug">
+				HumbleShare is not affiliated with, endorsed by, or sponsored by Humble Bundle Inc., IGN
+				Entertainment Inc., or Ziff Davis, LLC.
+			</p>
 		</div>
 	</footer>
 </div>

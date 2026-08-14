@@ -1,4 +1,4 @@
-const PATTERN_URL = 'https://humbleshare-assets.boxingoctopus.io/SVG/HBPattern.svg';
+const PATTERN_URL = '/media/svg/HBPattern.svg';
 
 export type Motion = 'twinkle' | 'pulse' | 'spin' | 'bob' | 'drift' | 'sway';
 

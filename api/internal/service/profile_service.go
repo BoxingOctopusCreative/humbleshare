@@ -33,18 +33,16 @@ var (
 )
 
 type ProfileService struct {
-	users            repository.UserRepository
-	codes            repository.CodeRepository
-	publicWebBaseURL string
-	userAssetsCDN   string
+	users         repository.UserRepository
+	codes         repository.CodeRepository
+	userAssetsCDN string
 }
 
-func NewProfileService(users repository.UserRepository, codes repository.CodeRepository, publicWebBaseURL, userAssetsCDN string) *ProfileService {
+func NewProfileService(users repository.UserRepository, codes repository.CodeRepository, userAssetsCDN string) *ProfileService {
 	return &ProfileService{
-		users:            users,
-		codes:            codes,
-		publicWebBaseURL: strings.TrimRight(strings.TrimSpace(publicWebBaseURL), "/"),
-		userAssetsCDN:    strings.TrimRight(strings.TrimSpace(userAssetsCDN), "/"),
+		users:         users,
+		codes:         codes,
+		userAssetsCDN: strings.TrimRight(strings.TrimSpace(userAssetsCDN), "/"),
 	}
 }
 
@@ -178,8 +176,8 @@ func (s *ProfileService) GetBySlug(ctx context.Context, slug string, viewer *mod
 		Bio:           u.Bio,
 		SteamGamertag: u.SteamGamertag,
 		DiscordTag:    u.DiscordTag,
-		AvatarURL:     media.ProxyURL(s.publicWebBaseURL, s.userAssetsCDN, u.AvatarURL),
-		BannerURL:     media.ProxyURL(s.publicWebBaseURL, s.userAssetsCDN, u.BannerURL),
+		AvatarURL:     media.ProxyURL(s.userAssetsCDN, u.AvatarURL),
+		BannerURL:     media.ProxyURL(s.userAssetsCDN, u.BannerURL),
 		ProfilePublic: u.ProfilePublic,
 		RecentClaims:  claims,
 		IsOwner:       isOwner,

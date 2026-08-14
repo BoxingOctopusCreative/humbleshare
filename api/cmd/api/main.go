@@ -162,7 +162,7 @@ func runAPI(cfg config.Config) error {
 	codeSvc := service.NewCodeService(codeRepo)
 	gameSvc := service.NewGameService(gameRepo)
 	adminSvc := service.NewAdminService(codeRepo, gameRepo, statsRepo)
-	profileSvc := service.NewProfileService(userRepo, codeRepo, cfg.PublicWebBaseURL, cfg.R2UserAssetsPublicBaseURL)
+	profileSvc := service.NewProfileService(userRepo, codeRepo, cfg.R2UserAssetsPublicBaseURL)
 
 	cacheTTL := time.Duration(cfg.SteamMetadataCacheTTLSeconds) * time.Second
 	steamClient := steam.NewClient(cfg.SteamRatePerSecond, cacheTTL, gameRepo)
@@ -177,7 +177,8 @@ func runAPI(cfg config.Config) error {
 	authH := handler.NewAuthHandler(authSvc, oauthSvc, cfg.CookieSecure, cfg.SessionMaxAge)
 	profileH := handler.NewProfileHandler(profileSvc)
 	mediaHosts := media.AllowedHosts(append([]string{cfg.PublicWebBaseURL}, cfg.CORSOrigins...)...)
-	mediaH := handler.NewMediaHandler(userAssetsStore, mediaHosts, cfg.MediaProxySecret)
+	staticStore := storage.NewR2(r2Client, cfg.R2Bucket)
+	mediaH := handler.NewMediaHandler(userAssetsStore, staticStore, mediaHosts, cfg.MediaProxySecret)
 
 	requireSession := middleware.RequireSession(authSvc)
 	optionalSession := middleware.OptionalSession(authSvc)

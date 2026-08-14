@@ -50,40 +50,54 @@ func RefererAllowed(referer, origin string, hosts map[string]struct{}) bool {
 	return true
 }
 
-// ParseObjectKey validates media object keys (avatars|banners)/filename.
+// ParseObjectKey validates media object keys (avatars|banners|svg)/filename.
 func ParseObjectKey(kind, name string) (string, bool) {
 	kind = strings.TrimSpace(kind)
 	name = strings.TrimSpace(name)
-	if kind != "avatars" && kind != "banners" {
-		return "", false
-	}
 	if name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") || strings.Contains(name, "\\") {
 		return "", false
 	}
 	if strings.HasPrefix(name, ".") {
 		return "", false
 	}
-	return kind + "/" + name, true
+	switch kind {
+	case "avatars", "banners":
+		return kind + "/" + name, true
+	case "svg":
+		if !strings.HasSuffix(strings.ToLower(name), ".svg") {
+			return "", false
+		}
+		return "SVG/" + name, true
+	default:
+		return "", false
+	}
 }
 
-// ProxyURL rewrites a CDN asset URL to a same-origin /media/... path on webBase.
-func ProxyURL(webBase, cdnBase, assetURL string) string {
-	webBase = strings.TrimRight(strings.TrimSpace(webBase), "/")
-	cdnBase = strings.TrimRight(strings.TrimSpace(cdnBase), "/")
+// ProxyURL rewrites a stored CDN asset URL to a same-origin relative /media/... path.
+func ProxyURL(cdnBase, assetURL string) string {
 	assetURL = strings.TrimSpace(assetURL)
-	if webBase == "" || cdnBase == "" || assetURL == "" {
+	if assetURL == "" {
 		return assetURL
 	}
-	prefix := cdnBase + "/"
-	if !strings.HasPrefix(assetURL, prefix) {
-		return assetURL
+	if u, err := url.Parse(assetURL); err == nil {
+		key := strings.TrimPrefix(u.Path, "/")
+		if objectKeyOK(key) {
+			return "/media/" + key
+		}
 	}
-	key := strings.TrimPrefix(assetURL, prefix)
+	cdnBase = strings.TrimRight(strings.TrimSpace(cdnBase), "/")
+	if cdnBase != "" && strings.HasPrefix(assetURL, cdnBase+"/") {
+		key := strings.TrimPrefix(assetURL, cdnBase+"/")
+		if objectKeyOK(key) {
+			return "/media/" + key
+		}
+	}
+	return assetURL
+}
+
+func objectKeyOK(key string) bool {
 	if key == "" || strings.Contains(key, "..") || strings.HasPrefix(key, "/") {
-		return assetURL
+		return false
 	}
-	if !strings.HasPrefix(key, "avatars/") && !strings.HasPrefix(key, "banners/") {
-		return assetURL
-	}
-	return webBase + "/media/" + key
+	return strings.HasPrefix(key, "avatars/") || strings.HasPrefix(key, "banners/")
 }

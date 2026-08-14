@@ -30,8 +30,8 @@ func TestObjectKeyFromAvatarURL(t *testing.T) {
 	if got != "avatars/u1.jpg" {
 		t.Fatalf("got %q", got)
 	}
-	if objectKeyFromAvatarURL(base, "https://evil.example/avatars/u1.jpg") != "" {
-		t.Fatal("expected empty for foreign host")
+	if objectKeyFromAvatarURL(base, "https://old.example/avatars/u1.jpg") != "avatars/u1.jpg" {
+		t.Fatal("expected key from path even when CDN host changed")
 	}
 	if objectKeyFromAvatarURL(base, base+"/../etc/passwd") != "" {
 		t.Fatal("expected empty for traversal")

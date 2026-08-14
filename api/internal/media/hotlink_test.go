@@ -32,12 +32,26 @@ func TestParseObjectKey(t *testing.T) {
 	if _, ok := ParseObjectKey("avatars", "../x.png"); ok {
 		t.Fatal("expected reject traversal")
 	}
+	key, ok = ParseObjectKey("svg", "humbleshare_wide.svg")
+	if !ok || key != "SVG/humbleshare_wide.svg" {
+		t.Fatalf("svg key: got %q %v", key, ok)
+	}
+	if _, ok := ParseObjectKey("svg", "note.txt"); ok {
+		t.Fatal("expected reject non-svg")
+	}
 }
 
 func TestProxyURL(t *testing.T) {
-	got := ProxyURL("https://app.example", "https://cdn.example", "https://cdn.example/avatars/u1.png")
-	want := "https://app.example/media/avatars/u1.png"
+	got := ProxyURL("https://cdn.example", "https://cdn.example/avatars/u1.png")
+	want := "/media/avatars/u1.png"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+	if ProxyURL("https://cdn.example", "https://other.example/avatars/u1.png") != "/media/avatars/u1.png" {
+		t.Fatal("expected avatars path to rewrite regardless of CDN host")
+	}
+	passthrough := "https://cdn.example/other/u1.png"
+	if ProxyURL("https://cdn.example", passthrough) != passthrough {
+		t.Fatal("expected non-avatar path to pass through")
 	}
 }
