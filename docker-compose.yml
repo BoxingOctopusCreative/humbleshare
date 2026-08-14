@@ -31,7 +31,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=shared-network
       # Beats humbleshare-web (priority 1). Service name defaults to humbleshare-api (must match services.* below).
-      - traefik.http.routers.humbleshare-api.rule=Host(`humbleshare.com`) && (PathPrefix(`/api`) || Path(`/health`) || PathPrefix(`/webhooks`))
+      - traefik.http.routers.humbleshare-api.rule=Host(`humbleshare.com`) && (PathPrefix(`/api/v1`) || Path(`/health`) || PathPrefix(`/webhooks`))
       - traefik.http.routers.humbleshare-api.priority=100
       - traefik.http.routers.humbleshare-api.tls=true
       - traefik.http.routers.humbleshare-api.entrypoints=websecure
@@ -89,7 +89,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=shared-network
-      - traefik.http.routers.humbleshare-web.rule=Host(`humbleshare.com`) && !PathPrefix(`/api`) && !Path(`/health`) && !PathPrefix(`/webhooks`)
+      - traefik.http.routers.humbleshare-web.rule=Host(`humbleshare.com`) && !PathPrefix(`/api/v1`) && !Path(`/health`) && !PathPrefix(`/webhooks`)
       - traefik.http.routers.humbleshare-web.priority=1
       - traefik.http.routers.humbleshare-web.service=humbleshare-web
       - traefik.http.routers.humbleshare-web.tls=true
