@@ -18,12 +18,36 @@
 	} = $props();
 
 	let copied = $state(false);
+	let reporting = $state(false);
+	let reported = $state(false);
+	let reportError = $state('');
 
 	async function copy() {
 		if (!result) return;
 		await navigator.clipboard.writeText(result.code_value);
 		copied = true;
 		setTimeout(() => (copied = false), 1500);
+	}
+
+	async function reportBroken() {
+		if (!result || reporting || reported) return;
+		const ok = confirm(
+			"Report this as broken? Use this if the gift link expired, the page didn't load, or the Steam key didn't redeem."
+		);
+		if (!ok) return;
+		reporting = true;
+		reportError = '';
+		try {
+			const res = await fetch(`/api/codes/${result.id}/report-dead`, { method: 'POST' });
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				reportError = body.msg || body.message || 'Could not report this key.';
+				return;
+			}
+			reported = true;
+		} finally {
+			reporting = false;
+		}
 	}
 
 	const redeemUrl = $derived(
@@ -85,6 +109,26 @@
 					Done
 				</button>
 			</div>
+			{#if reported}
+				<p class="mt-3 text-sm text-[var(--color-muted)]">
+					Thanks. We marked this as broken so it won't count as a working key.
+				</p>
+			{:else}
+				<p class="mt-4 text-xs text-[var(--color-muted)]">
+					Gift link expired or Steam key didn't redeem?
+				</p>
+				<button
+					type="button"
+					class="mt-1 text-sm text-[var(--color-danger)]"
+					disabled={reporting}
+					onclick={reportBroken}
+				>
+					{reporting ? 'Reporting…' : 'Report Game'}
+				</button>
+				{#if reportError}
+					<p class="mt-1 text-sm text-[var(--color-danger)]">{reportError}</p>
+				{/if}
+			{/if}
 		{:else}
 			<p class="mt-2 text-sm text-[var(--color-muted)]">
 				Claim this key under your account. You'll only see it once.

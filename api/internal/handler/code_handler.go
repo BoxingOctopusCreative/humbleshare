@@ -44,12 +44,16 @@ func (h *CodeHandler) Claim(c *fiber.Ctx) error {
 
 // ReportDead handles POST /api/v1/codes/:id/report-dead
 func (h *CodeHandler) ReportDead(c *fiber.Ctx) error {
+	u := middleware.UserFromLocals(c)
+	if u == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid code id")
 	}
 
-	if err := h.codes.ReportDead(c.Context(), id); err != nil {
+	if err := h.codes.ReportDead(c.Context(), id, u.ID); err != nil {
 		return httpx.ServiceError(fiber.StatusInternalServerError, err)
 	}
 	return c.JSON(fiber.Map{"ok": true})

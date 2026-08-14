@@ -53,6 +53,11 @@ export type OAuthIdentity = {
 	created_at: string;
 };
 
+export type SteamSuggestion = {
+	appid: number;
+	name: string;
+};
+
 export type Game = {
 	id: string;
 	steam_appid: number | null;

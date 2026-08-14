@@ -45,5 +45,8 @@ func clientError(err error) (message string, status int, ok bool) {
 	if errors.Is(err, repository.ErrCodeAlreadyTaken) {
 		return "Code is already claimed.", fiber.StatusConflict, true
 	}
+	if errors.Is(err, repository.ErrNotClaimant) {
+		return "You can only report a key you claimed.", fiber.StatusForbidden, true
+	}
 	return "", 0, false
 }

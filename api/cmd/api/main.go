@@ -265,6 +265,7 @@ func runAPI(cfg config.Config) error {
 	admin.Post("/codes/bulk", adminH.BulkAddCodes)
 	admin.Get("/codes", adminH.ListCodes)
 	admin.Patch("/codes/:id", adminH.UpdateCode)
+	admin.Delete("/codes/:id", adminH.DeleteCode)
 	admin.Get("/games/unresolved", adminH.ListUnresolved)
 	admin.Patch("/games/:id", adminH.SetGameSteamAppID)
 	admin.Post("/games/:id/refresh", adminH.RefreshGameMetadata)

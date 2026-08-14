@@ -32,7 +32,11 @@ func (s *CodeService) Claim(ctx context.Context, gameID uuid.UUID, claimedBy str
 	return s.codes.ClaimOldestAvailable(ctx, gameID, strings.TrimSpace(claimedBy), uidPtr)
 }
 
-// ReportDead marks a code as dead (e.g. already redeemed before we got it).
-func (s *CodeService) ReportDead(ctx context.Context, id uuid.UUID) error {
-	return s.codes.ReportDead(ctx, id)
+// ReportDead marks a claimed code as dead (expired gift, already redeemed, or otherwise broken).
+// Only the user who claimed it can report it.
+func (s *CodeService) ReportDead(ctx context.Context, id uuid.UUID, claimedByUserID string) error {
+	if strings.TrimSpace(claimedByUserID) == "" {
+		return repository.ErrNotClaimant
+	}
+	return s.codes.ReportDead(ctx, id, strings.TrimSpace(claimedByUserID))
 }

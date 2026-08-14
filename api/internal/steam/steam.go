@@ -17,6 +17,7 @@ import (
 const (
 	storeSearchURL = "https://store.steampowered.com/api/storesearch/?term=%s&cc=CA&l=en"
 	appDetailsURL  = "https://store.steampowered.com/api/appdetails?appids=%d&cc=CA&l=en"
+	maxSuggestions = 8
 )
 
 // AppMetadata holds Steam metadata fetched from appdetails.
@@ -95,10 +96,10 @@ func NewClient(ratePerSecond float64, cacheTTL time.Duration, gameRepo repositor
 	}
 }
 
-// StoreSearch returns candidate apps matching title. Returns nil if no match found.
+// StoreSearch returns candidate apps matching title.
 type SearchResult struct {
-	AppID int
-	Name  string
+	AppID int    `json:"appid"`
+	Name  string `json:"name"`
 }
 
 // StoreSearch queries the Steam store search API and returns candidates.
@@ -233,25 +234,41 @@ func (c *Client) AppDetails(ctx context.Context, appID int) (*AppMetadata, error
 }
 
 // EnrichGame searches Steam for the game by name and updates its metadata in the DB.
-// Returns nil if no match is found (leaves game unresolved rather than failing).
+// Returns nil if no exact match is found (leaves game unresolved rather than failing).
 func (c *Client) EnrichGame(ctx context.Context, gameID uuid.UUID, name string) error {
+	_, _, err := c.ResolveByName(ctx, gameID, name)
+	return err
+}
+
+// ResolveByName looks up a game by exact title. On an exact match it sets steam_appid
+// and refreshes store metadata. Otherwise it returns similar store-search titles.
+func (c *Client) ResolveByName(ctx context.Context, gameID uuid.UUID, name string) (appID int, suggestions []SearchResult, err error) {
 	candidates, err := c.StoreSearch(ctx, name)
 	if err != nil {
-		return fmt.Errorf("search %q: %w", name, err)
+		return 0, nil, fmt.Errorf("search %q: %w", name, err)
 	}
 
-	// Look for an exact (case-insensitive) name match among candidates.
 	matchedAppID := MatchExactAppID(name, candidates)
 	if matchedAppID == 0 {
-		// No exact match — leave game unresolved.
-		return nil
+		return 0, limitSuggestions(candidates, maxSuggestions), nil
 	}
 
 	if err := c.gameRepo.SetSteamAppID(ctx, gameID, matchedAppID); err != nil {
-		return fmt.Errorf("set steam_appid: %w", err)
+		return 0, nil, fmt.Errorf("set steam_appid: %w", err)
 	}
+	if err := c.RefreshMetadata(ctx, gameID, matchedAppID); err != nil {
+		return 0, nil, err
+	}
+	return matchedAppID, nil, nil
+}
 
-	return c.RefreshMetadata(ctx, gameID, matchedAppID)
+func limitSuggestions(in []SearchResult, n int) []SearchResult {
+	if len(in) <= n {
+		return in
+	}
+	out := make([]SearchResult, n)
+	copy(out, in)
+	return out
 }
 
 // RefreshMetadata fetches the latest Steam metadata for appID and writes it to the DB.

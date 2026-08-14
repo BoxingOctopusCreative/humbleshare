@@ -132,6 +132,18 @@ func (h *AdminHandler) UpdateCode(c *fiber.Ctx) error {
 	return c.JSON(code)
 }
 
+// DeleteCode handles DELETE /api/v1/admin/codes/:id
+func (h *AdminHandler) DeleteCode(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid code id")
+	}
+	if err := h.admin.DeleteCode(c.Context(), id); err != nil {
+		return httpx.ServiceError(fiber.StatusInternalServerError, err)
+	}
+	return c.JSON(fiber.Map{"ok": true})
+}
+
 // ListUnresolved handles GET /api/v1/admin/games/unresolved
 func (h *AdminHandler) ListUnresolved(c *fiber.Ctx) error {
 	games, err := h.admin.ListUnresolved(c.Context())
@@ -145,7 +157,7 @@ func (h *AdminHandler) ListUnresolved(c *fiber.Ctx) error {
 }
 
 // SetGameSteamAppID handles PATCH /api/v1/admin/games/:id
-// Body may include steam_appid and/or name.
+// Body may include steam_appid, name, and/or store_url.
 func (h *AdminHandler) SetGameSteamAppID(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -155,12 +167,20 @@ func (h *AdminHandler) SetGameSteamAppID(c *fiber.Ctx) error {
 	var body struct {
 		SteamAppID *int    `json:"steam_appid"`
 		Name       *string `json:"name"`
+		StoreURL   *string `json:"store_url"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
-	if body.Name == nil && body.SteamAppID == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "name or steam_appid is required")
+	if body.Name == nil && body.SteamAppID == nil && body.StoreURL == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "name, steam_appid, or store_url is required")
+	}
+	if body.StoreURL != nil && body.SteamAppID == nil {
+		appID, err := steam.ParseStoreURL(*body.StoreURL)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+		body.SteamAppID = &appID
 	}
 
 	if body.Name != nil {
@@ -210,7 +230,8 @@ func (h *AdminHandler) SetGameSteamAppID(c *fiber.Ctx) error {
 
 // RefreshGameMetadata handles POST /api/v1/admin/games/:id/refresh.
 // With a steam_appid, re-fetches store metadata. Without one, searches Steam by title
-// and sets appid + metadata on an exact name match.
+// and sets appid + metadata on an exact name match. If there is no exact match, the
+// response includes similar store titles for the admin to pick, or they can PATCH a store URL.
 func (h *AdminHandler) RefreshGameMetadata(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -223,15 +244,24 @@ func (h *AdminHandler) RefreshGameMetadata(c *fiber.Ctx) error {
 	}
 
 	if game.SteamAppID == nil {
-		if err := h.steamClient.EnrichGame(c.Context(), id, game.Name); err != nil {
+		appID, suggestions, err := h.steamClient.ResolveByName(c.Context(), id, game.Name)
+		if err != nil {
 			return httpx.ServiceError(fiber.StatusBadGateway, err)
 		}
 		updated, err := h.admin.GetGame(c.Context(), id)
 		if err != nil {
 			return httpx.ServiceError(fiber.StatusInternalServerError, err)
 		}
-		if updated.SteamAppID == nil {
-			return fiber.NewError(fiber.StatusNotFound, "no exact Steam store match for that title")
+		if appID == 0 {
+			if suggestions == nil {
+				suggestions = []steam.SearchResult{}
+			}
+			return c.JSON(fiber.Map{
+				"id":          updated.ID,
+				"name":        updated.Name,
+				"steam_appid": nil,
+				"suggestions": suggestions,
+			})
 		}
 		return c.JSON(updated)
 	}

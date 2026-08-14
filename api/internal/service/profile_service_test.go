@@ -71,7 +71,8 @@ func (s *profileCodeStub) GetByID(context.Context, uuid.UUID) (*models.Code, err
 func (s *profileCodeStub) Update(context.Context, uuid.UUID, repository.CodePatch) (*models.Code, error) {
 	return nil, repository.ErrCodeNotFound
 }
-func (s *profileCodeStub) ReportDead(context.Context, uuid.UUID) error { return nil }
+func (s *profileCodeStub) Delete(context.Context, uuid.UUID) error             { return nil }
+func (s *profileCodeStub) ReportDead(context.Context, uuid.UUID, string) error { return nil }
 
 func TestProfileServiceGetBySlug(t *testing.T) {
 	ownerID := uuid.NewString()

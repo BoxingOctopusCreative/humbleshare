@@ -45,11 +45,11 @@ func TestServiceError(t *testing.T) {
 			wantMsg:    "That code is already in the inventory.",
 		},
 		{
-			name:       "not found",
-			err:        repository.ErrCodeNotFound,
+			name:       "not claimant",
+			err:        repository.ErrNotClaimant,
 			defaultSt:  500,
-			wantStatus: fiber.StatusNotFound,
-			wantMsg:    "Code not found.",
+			wantStatus: fiber.StatusForbidden,
+			wantMsg:    "You can only report a key you claimed.",
 		},
 		{
 			name:       "unknown maps to generic",

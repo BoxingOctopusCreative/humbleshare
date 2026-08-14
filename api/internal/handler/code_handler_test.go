@@ -18,7 +18,8 @@ import (
 )
 
 type claimStubRepo struct {
-	claimFn func(ctx context.Context, gameID uuid.UUID, claimedBy string, claimedByUserID *string) (*models.ClaimResult, error)
+	claimFn      func(ctx context.Context, gameID uuid.UUID, claimedBy string, claimedByUserID *string) (*models.ClaimResult, error)
+	reportDeadFn func(ctx context.Context, id uuid.UUID, claimedByUserID string) error
 }
 
 func (s *claimStubRepo) ClaimOldestAvailable(ctx context.Context, gameID uuid.UUID, claimedBy string, claimedByUserID *string) (*models.ClaimResult, error) {
@@ -37,7 +38,13 @@ func (s *claimStubRepo) GetByID(context.Context, uuid.UUID) (*models.Code, error
 func (s *claimStubRepo) Update(context.Context, uuid.UUID, repository.CodePatch) (*models.Code, error) {
 	return nil, repository.ErrCodeNotFound
 }
-func (s *claimStubRepo) ReportDead(context.Context, uuid.UUID) error { return nil }
+func (s *claimStubRepo) Delete(context.Context, uuid.UUID) error { return nil }
+func (s *claimStubRepo) ReportDead(ctx context.Context, id uuid.UUID, claimedByUserID string) error {
+	if s.reportDeadFn != nil {
+		return s.reportDeadFn(ctx, id, claimedByUserID)
+	}
+	return nil
+}
 
 func TestCodeHandlerClaim(t *testing.T) {
 	gameID := uuid.New()
@@ -129,6 +136,96 @@ func TestCodeHandlerClaim(t *testing.T) {
 				if out.CodeValue != tc.wantCode {
 					t.Fatalf("code=%q", out.CodeValue)
 				}
+			}
+		})
+	}
+}
+
+func TestCodeHandlerReportDead(t *testing.T) {
+	codeID := uuid.New()
+	user := &models.User{ID: uuid.NewString(), DisplayName: "Ryan", Role: models.RoleMember}
+
+	cases := []struct {
+		name       string
+		id         string
+		user       *models.User
+		reportErr  error
+		wantStatus int
+		wantUser   string
+	}{
+		{
+			name:       "success",
+			id:         codeID.String(),
+			user:       user,
+			wantStatus: http.StatusOK,
+			wantUser:   user.ID,
+		},
+		{
+			name:       "invalid id",
+			id:         "not-a-uuid",
+			user:       user,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "unauthorized",
+			id:         codeID.String(),
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "not claimant",
+			id:         codeID.String(),
+			user:       user,
+			reportErr:  repository.ErrNotClaimant,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "not found",
+			id:         codeID.String(),
+			user:       user,
+			reportErr:  repository.ErrCodeNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotUser string
+			repo := &claimStubRepo{
+				reportDeadFn: func(_ context.Context, _ uuid.UUID, claimedByUserID string) error {
+					gotUser = claimedByUserID
+					return tc.reportErr
+				},
+			}
+			h := NewCodeHandler(service.NewCodeService(repo))
+			app := fiber.New(fiber.Config{
+				ErrorHandler: func(c *fiber.Ctx, err error) error {
+					code := fiber.StatusInternalServerError
+					msg := err.Error()
+					if e, ok := err.(*fiber.Error); ok {
+						code = e.Code
+						msg = e.Message
+					}
+					return c.Status(code).JSON(fiber.Map{"error": true, "msg": msg})
+				},
+			})
+			app.Post("/report/:id", func(c *fiber.Ctx) error {
+				if tc.user != nil {
+					c.Locals(middleware.LocalsUserKey, tc.user)
+				}
+				return h.ReportDead(c)
+			})
+
+			req := httptest.NewRequest(http.MethodPost, "/report/"+tc.id, nil)
+			res, err := app.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.StatusCode != tc.wantStatus {
+				b, _ := io.ReadAll(res.Body)
+				t.Fatalf("status=%d body=%s want %d", res.StatusCode, b, tc.wantStatus)
+			}
+			if tc.wantUser != "" && gotUser != tc.wantUser {
+				t.Fatalf("user=%q want=%q", gotUser, tc.wantUser)
 			}
 		})
 	}

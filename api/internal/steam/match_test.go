@@ -29,3 +29,21 @@ func TestMatchExactAppID(t *testing.T) {
 		})
 	}
 }
+
+func TestLimitSuggestions(t *testing.T) {
+	in := []SearchResult{
+		{AppID: 1, Name: "A"},
+		{AppID: 2, Name: "B"},
+		{AppID: 3, Name: "C"},
+	}
+	got := limitSuggestions(in, 2)
+	if len(got) != 2 || got[0].AppID != 1 || got[1].AppID != 2 {
+		t.Fatalf("got %#v", got)
+	}
+	if len(limitSuggestions(in, 8)) != 3 {
+		t.Fatal("short list should pass through")
+	}
+	if limitSuggestions(nil, 8) != nil {
+		t.Fatal("nil should stay nil")
+	}
+}

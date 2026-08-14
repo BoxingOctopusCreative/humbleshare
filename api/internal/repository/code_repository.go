@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/boxingoctopus/humbleshare/api/internal/models"
@@ -17,6 +18,7 @@ var (
 	ErrCodeDuplicate    = errors.New("code already exists")
 	ErrNoAvailableCodes = errors.New("no available codes for game")
 	ErrGameNotFound     = errors.New("game not found")
+	ErrNotClaimant      = errors.New("not the claimant")
 )
 
 // CodePatch carries optional fields for PATCH /admin/codes/:id.
@@ -36,7 +38,8 @@ type CodeRepository interface {
 	ListRecentClaimsByUserID(ctx context.Context, userID string, limit int) ([]models.PublicClaim, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Code, error)
 	Update(ctx context.Context, id uuid.UUID, patch CodePatch) (*models.Code, error)
-	ReportDead(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ReportDead(ctx context.Context, id uuid.UUID, claimedByUserID string) error
 }
 
 type PostgresCodeRepository struct {
@@ -208,20 +211,54 @@ func (r *PostgresCodeRepository) Update(ctx context.Context, id uuid.UUID, patch
 	return &c, err
 }
 
-func (r *PostgresCodeRepository) ReportDead(ctx context.Context, id uuid.UUID) error {
+func (r *PostgresCodeRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var gameID uuid.UUID
+	err = tx.QueryRow(ctx, `DELETE FROM codes WHERE id = $1 RETURNING game_id`, id).Scan(&gameID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrCodeNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM games g
+		WHERE g.id = $1
+		  AND NOT EXISTS (SELECT 1 FROM codes c WHERE c.game_id = g.id)
+	`, gameID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresCodeRepository) ReportDead(ctx context.Context, id uuid.UUID, claimedByUserID string) error {
+	if strings.TrimSpace(claimedByUserID) == "" {
+		return ErrNotClaimant
+	}
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE codes SET status = 'dead' WHERE id = $1 AND status != 'dead'
-	`, id)
+		UPDATE codes
+		SET status = 'dead'
+		WHERE id = $1
+		  AND claimed_by_user_id = $2
+		  AND status IN ('claimed', 'dead')
+	`, id, claimedByUserID)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		// Either not found or already dead — verify existence.
 		var exists bool
 		_ = r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM codes WHERE id = $1)`, id).Scan(&exists)
 		if !exists {
 			return ErrCodeNotFound
 		}
+		return ErrNotClaimant
 	}
 	return nil
 }

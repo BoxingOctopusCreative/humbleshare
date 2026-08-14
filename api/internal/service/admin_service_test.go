@@ -14,7 +14,7 @@ import (
 type stubCodeRepo struct {
 	claimFn      func(ctx context.Context, gameID uuid.UUID, claimedBy string) (*models.ClaimResult, error)
 	createFn     func(ctx context.Context, gameID uuid.UUID, codeValue, codeType string, source, sourceOrderID *string) (*models.Code, error)
-	reportDeadFn func(ctx context.Context, id uuid.UUID) error
+	reportDeadFn func(ctx context.Context, id uuid.UUID, claimedByUserID string) error
 }
 
 func (s *stubCodeRepo) ClaimOldestAvailable(ctx context.Context, gameID uuid.UUID, claimedBy string, claimedByUserID *string) (*models.ClaimResult, error) {
@@ -39,9 +39,10 @@ func (s *stubCodeRepo) GetByID(context.Context, uuid.UUID) (*models.Code, error)
 func (s *stubCodeRepo) Update(context.Context, uuid.UUID, repository.CodePatch) (*models.Code, error) {
 	return nil, repository.ErrCodeNotFound
 }
-func (s *stubCodeRepo) ReportDead(ctx context.Context, id uuid.UUID) error {
+func (s *stubCodeRepo) Delete(context.Context, uuid.UUID) error { return nil }
+func (s *stubCodeRepo) ReportDead(ctx context.Context, id uuid.UUID, claimedByUserID string) error {
 	if s.reportDeadFn != nil {
-		return s.reportDeadFn(ctx, id)
+		return s.reportDeadFn(ctx, id, claimedByUserID)
 	}
 	return nil
 }
@@ -50,7 +51,9 @@ type stubGameRepo struct {
 	upsertFn func(ctx context.Context, name string) (*models.Game, error)
 }
 
-func (s *stubGameRepo) ListAvailable(context.Context, string) ([]*models.Game, error) { return nil, nil }
+func (s *stubGameRepo) ListAvailable(context.Context, string) ([]*models.Game, error) {
+	return nil, nil
+}
 func (s *stubGameRepo) GetByID(context.Context, uuid.UUID) (*models.Game, error) {
 	return nil, repository.ErrGameNotFound
 }
@@ -67,8 +70,8 @@ func (s *stubGameRepo) ListUnresolved(context.Context) ([]*models.Game, error) {
 func (s *stubGameRepo) ListMissingScreenshots(context.Context) ([]*models.Game, error) {
 	return nil, nil
 }
-func (s *stubGameRepo) SetSteamAppID(context.Context, uuid.UUID, int) error    { return nil }
-func (s *stubGameRepo) UpdateName(context.Context, uuid.UUID, string) error    { return nil }
+func (s *stubGameRepo) SetSteamAppID(context.Context, uuid.UUID, int) error { return nil }
+func (s *stubGameRepo) UpdateName(context.Context, uuid.UUID, string) error { return nil }
 func (s *stubGameRepo) UpdateMetadata(context.Context, uuid.UUID, repository.GameMetadataPatch) error {
 	return nil
 }

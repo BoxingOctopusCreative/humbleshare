@@ -1,5 +1,12 @@
 <script lang="ts">
-	import type { AccessRequest, BulkLineResult, CodeRow, HumbleImportResult, User } from '$lib/types';
+	import type {
+		AccessRequest,
+		BulkLineResult,
+		CodeRow,
+		HumbleImportResult,
+		SteamSuggestion,
+		User
+	} from '$lib/types';
 	import { maskCode, parseBulkPreview } from '$lib/bulkParse';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -24,6 +31,11 @@
 	let busy = $state(false);
 	let lookupBusy = $state<Record<string, boolean>>({});
 	let lookupNote = $state('');
+	let deleteBusy = $state<Record<string, boolean>>({});
+	let steamLookup = $state<Record<string, { name: string; suggestions: SteamSuggestion[] }>>({});
+	let steamLookupCodeId = $state<Record<string, string>>({});
+	let storeUrlDraft = $state<Record<string, string>>({});
+	let storeUrlBusy = $state<Record<string, boolean>>({});
 	let editingCode = $state<CodeRow | null>(null);
 	let editBusy = $state(false);
 	let editError = $state('');
@@ -163,32 +175,138 @@
 		await invalidateAll();
 	}
 
+	async function deleteCode(code: CodeRow) {
+		const title = code.game_name ?? 'this item';
+		const claimed = code.status === 'claimed' ? ' This key is claimed.' : '';
+		if (!confirm(`Delete "${title}" from inventory?${claimed} This cannot be undone.`)) return;
+		if (deleteBusy[code.id]) return;
+		deleteBusy[code.id] = true;
+		try {
+			const res = await fetch(`/api/admin/codes/${code.id}`, { method: 'DELETE' });
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				lookupNote = body.msg || 'Delete failed';
+				return;
+			}
+			if (editingCode?.id === code.id) editingCode = null;
+			await invalidateAll();
+		} finally {
+			deleteBusy[code.id] = false;
+		}
+	}
+
+	function clearSteamLookup(gameId: string) {
+		if (gameId in steamLookup) {
+			const next = { ...steamLookup };
+			delete next[gameId];
+			steamLookup = next;
+		}
+		if (gameId in steamLookupCodeId) {
+			const nextIds = { ...steamLookupCodeId };
+			delete nextIds[gameId];
+			steamLookupCodeId = nextIds;
+		}
+	}
+
+	function openSteamResolve(
+		gameId: string,
+		name: string,
+		suggestions: SteamSuggestion[],
+		codeId?: string
+	) {
+		steamLookup = { ...steamLookup, [gameId]: { name, suggestions } };
+		if (codeId) {
+			steamLookupCodeId = { ...steamLookupCodeId, [gameId]: codeId };
+		}
+	}
+
 	async function resolveGame(id: string, steamAppid: number) {
-		await fetch(`/api/admin/games/${id}`, {
+		const res = await fetch(`/api/admin/games/${id}`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ steam_appid: steamAppid })
 		});
+		const body = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			lookupNote = body.msg || 'Failed to set Steam appid';
+			return false;
+		}
+		clearSteamLookup(id);
 		await invalidateAll();
+		return true;
 	}
 
-	async function lookupSteam(gameId: string, gameName?: string) {
+	async function pickSteamApp(gameId: string, appid: number, name: string) {
+		lookupNote = '';
+		const ok = await resolveGame(gameId, appid);
+		if (ok) lookupNote = `${name}: linked Steam app ${appid}`;
+	}
+
+	async function linkStoreURL(gameId: string) {
+		const url = (storeUrlDraft[gameId] ?? '').trim();
+		if (!url) {
+			lookupNote = 'Paste a Steam store URL.';
+			return;
+		}
+		if (storeUrlBusy[gameId]) return;
+		storeUrlBusy[gameId] = true;
+		lookupNote = '';
+		try {
+			const res = await fetch(`/api/admin/games/${gameId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ store_url: url })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				lookupNote = body.msg || 'Invalid Steam store URL';
+				return;
+			}
+			clearSteamLookup(gameId);
+			storeUrlDraft = { ...storeUrlDraft, [gameId]: '' };
+			lookupNote = `${body.name ?? gameId}: linked Steam app ${body.steam_appid}`;
+			await invalidateAll();
+		} finally {
+			storeUrlBusy[gameId] = false;
+		}
+	}
+
+	async function lookupSteam(gameId: string, gameName?: string, codeId?: string) {
 		if (lookupBusy[gameId]) return;
 		lookupBusy[gameId] = true;
 		lookupNote = '';
 		try {
 			const res = await fetch(`/api/admin/games/${gameId}/refresh`, { method: 'POST' });
 			const body = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				lookupNote = `${gameName ?? gameId}: ${body.msg || 'Steam lookup failed'}`;
+			const suggestions = Array.isArray(body.suggestions)
+				? (body.suggestions as SteamSuggestion[])
+				: [];
+			const label = body.name ?? gameName ?? gameId;
+			const appid = body.steam_appid;
+			const hasMeta = Boolean(body.header_image_url || body.capsule_image_url);
+			const linked = res.ok && appid != null;
+
+			if (linked && hasMeta) {
+				clearSteamLookup(gameId);
+				lookupNote = `${label}: linked Steam app ${appid}`;
+				await invalidateAll();
 				return;
 			}
-			const appid = body.steam_appid;
+
+			openSteamResolve(gameId, label, suggestions, codeId);
+
+			if (!res.ok) {
+				lookupNote = `${label}: ${body.msg || 'Steam lookup failed'}. Pick a similar title or paste a store URL.`;
+				return;
+			}
+			if (linked && !hasMeta) {
+				lookupNote = `${label}: Steam app ${appid} is set, but store metadata is missing. Pick a title or paste a store URL.`;
+				return;
+			}
 			lookupNote =
-				appid != null
-					? `${body.name ?? gameName ?? gameId}: linked Steam app ${appid}`
-					: `${gameName ?? gameId}: metadata refreshed`;
-			await invalidateAll();
+				suggestions.length > 0
+					? `${label}: no exact Steam match. Pick a similar title, or paste a store URL.`
+					: `${label}: no similar Steam titles. Paste a store URL.`;
 		} finally {
 			lookupBusy[gameId] = false;
 		}
@@ -305,6 +423,82 @@
 		</a>
 	{/each}
 </div>
+
+{#snippet storeUrlForm(gameId: string)}
+	<form
+		class="mt-2 flex flex-wrap gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			linkStoreURL(gameId);
+		}}
+	>
+		<input
+			type="text"
+			placeholder="https://store.steampowered.com/app/…"
+			class="min-w-56 flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs"
+			value={storeUrlDraft[gameId] ?? ''}
+			oninput={(e) => (storeUrlDraft[gameId] = e.currentTarget.value)}
+		/>
+		<button
+			type="submit"
+			class="rounded bg-[var(--color-admin)] px-2 py-1 text-xs text-black disabled:opacity-50"
+			disabled={storeUrlBusy[gameId]}
+		>
+			{storeUrlBusy[gameId] ? 'Linking…' : 'Link store URL'}
+		</button>
+	</form>
+{/snippet}
+
+{#snippet steamSuggestions(gameId: string, suggestions: SteamSuggestion[])}
+	<p class="mt-2 text-xs text-[var(--color-muted)]">
+		{suggestions.length > 0
+			? 'No exact Steam match. Pick a similar title, or paste a store URL.'
+			: 'No similar Steam titles. Paste a store URL.'}
+	</p>
+	{#if suggestions.length > 0}
+		<div class="mt-2 flex flex-wrap gap-1">
+			{#each suggestions as s (s.appid)}
+				<button
+					type="button"
+					class="rounded border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-2)]"
+					onclick={() => pickSteamApp(gameId, s.appid, s.name)}
+				>
+					{s.name}
+				</button>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet appidForm(gameId: string)}
+	<form
+		class="mt-2 flex gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			const fd = new FormData(e.currentTarget);
+			const id = Number(fd.get('appid'));
+			if (id > 0) resolveGame(gameId, id);
+		}}
+	>
+		<input
+			name="appid"
+			type="number"
+			placeholder="Steam appid"
+			class="w-36 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs"
+			required
+		/>
+		<button type="submit" class="rounded bg-[var(--color-admin)] px-2 py-1 text-xs text-black">
+			Set + refresh
+		</button>
+	</form>
+{/snippet}
+
+{#snippet steamResolvePanel(gameId: string, name: string, suggestions: SteamSuggestion[])}
+	<div class="font-medium text-sm">{name}</div>
+	{@render steamSuggestions(gameId, suggestions)}
+	{@render storeUrlForm(gameId)}
+	{@render appidForm(gameId)}
+{/snippet}
 
 {#if tab === 'import'}
 	<section class="grid gap-8 lg:grid-cols-2">
@@ -471,6 +665,11 @@
 		{#if lookupNote}
 			<p class="mb-2 text-xs text-[var(--color-muted)]">{lookupNote}</p>
 		{/if}
+		{#each Object.entries(steamLookup) as [gameId, match] (gameId)}
+			<div class="mb-3 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+				{@render steamResolvePanel(gameId, match.name, match.suggestions)}
+			</div>
+		{/each}
 		<div class="overflow-x-auto rounded border border-[var(--color-border)]">
 			<table class="w-full min-w-[960px] text-left text-xs">
 				<thead class="bg-[var(--color-surface)] text-[var(--color-muted)]">
@@ -528,11 +727,33 @@
 										type="button"
 										class="rounded border border-[var(--color-border)] px-2 py-0.5 text-[var(--color-text)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
 										disabled={lookupBusy[code.game_id]}
-										onclick={() => lookupSteam(code.game_id, code.game_name)}
+										onclick={() => lookupSteam(code.game_id, code.game_name, code.id)}
 									>
 										{lookupBusy[code.game_id] ? 'Looking up…' : 'Lookup'}
 									</button>
+									<button
+										type="button"
+										class="rounded border border-[var(--color-danger)] px-2 py-0.5 text-[var(--color-danger)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
+										disabled={deleteBusy[code.id]}
+										onclick={() => deleteCode(code)}
+									>
+										{deleteBusy[code.id] ? 'Deleting…' : 'Delete'}
+									</button>
 								</div>
+							</td>
+						</tr>
+						<tr
+							class="border-t border-[var(--color-border)] bg-[var(--color-surface)]"
+							hidden={!steamLookup[code.game_id] || steamLookupCodeId[code.game_id] !== code.id}
+						>
+							<td colspan="8" class="px-2 py-3">
+								{#if steamLookup[code.game_id]}
+									{@render steamResolvePanel(
+										code.game_id,
+										steamLookup[code.game_id].name,
+										steamLookup[code.game_id].suggestions
+									)}
+								{/if}
 							</td>
 						</tr>
 					{/each}
@@ -555,31 +776,32 @@
 	<section class="grid gap-8 lg:grid-cols-2">
 		<div>
 			<h2 class="font-semibold">Unresolved games</h2>
-			<p class="mt-1 text-sm text-[var(--color-muted)]">Set a Steam appid to fetch metadata.</p>
+			<p class="mt-1 text-sm text-[var(--color-muted)]">
+				Find similar Steam titles, paste a store URL, or set an appid.
+			</p>
+			{#if lookupNote}
+				<p class="mt-2 text-xs text-[var(--color-muted)]">{lookupNote}</p>
+			{/if}
 			<ul class="mt-3 space-y-2">
 				{#each data.unresolved as g (g.id)}
 					<li class="rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
-						<div class="font-medium">{g.name}</div>
-						<form
-							class="mt-2 flex gap-2"
-							onsubmit={(e) => {
-								e.preventDefault();
-								const fd = new FormData(e.currentTarget);
-								const id = Number(fd.get('appid'));
-								if (id > 0) resolveGame(g.id, id);
-							}}
-						>
-							<input
-								name="appid"
-								type="number"
-								placeholder="Steam appid"
-								class="w-36 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs"
-								required
-							/>
-							<button type="submit" class="rounded bg-[var(--color-admin)] px-2 py-1 text-xs text-black">
-								Set + refresh
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<div class="font-medium">{g.name}</div>
+							<button
+								type="button"
+								class="rounded border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
+								disabled={lookupBusy[g.id]}
+								onclick={() => lookupSteam(g.id, g.name)}
+							>
+								{lookupBusy[g.id] ? 'Looking up…' : 'Find on Steam'}
 							</button>
-						</form>
+						</div>
+						{#if steamLookup[g.id]}
+							{@const match = steamLookup[g.id]}
+							{@render steamSuggestions(g.id, match.suggestions)}
+						{/if}
+						{@render storeUrlForm(g.id)}
+						{@render appidForm(g.id)}
 					</li>
 				{:else}
 					<li class="text-sm text-[var(--color-muted)]">Queue empty.</li>

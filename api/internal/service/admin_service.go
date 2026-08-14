@@ -136,6 +136,11 @@ func (s *AdminService) UpdateCode(ctx context.Context, id uuid.UUID, patch repos
 	return s.codes.Update(ctx, id, patch)
 }
 
+// DeleteCode removes an inventory item. If it was the last code for that game, the game is removed too.
+func (s *AdminService) DeleteCode(ctx context.Context, id uuid.UUID) error {
+	return s.codes.Delete(ctx, id)
+}
+
 // ListUnresolved returns games without a steam_appid.
 func (s *AdminService) ListUnresolved(ctx context.Context) ([]*models.Game, error) {
 	return s.games.ListUnresolved(ctx)

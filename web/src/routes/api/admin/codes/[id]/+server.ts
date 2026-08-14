@@ -20,3 +20,18 @@ export const PATCH: RequestHandler = async ({ cookies, params, request }) => {
 		throw e;
 	}
 };
+
+export const DELETE: RequestHandler = async ({ cookies, params }) => {
+	const sessionToken = cookies.get(SESSION_COOKIE);
+	if (!sessionToken) return json({ error: true, msg: 'unauthorized' }, { status: 401 });
+	try {
+		const result = await apiFetch(`/api/v1/admin/codes/${params.id}`, {
+			method: 'DELETE',
+			sessionToken
+		});
+		return json(result ?? { ok: true });
+	} catch (e) {
+		if (e instanceof ApiError) return json({ error: true, msg: e.message }, { status: e.status });
+		throw e;
+	}
+};
