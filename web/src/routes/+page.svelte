@@ -11,7 +11,7 @@
 	<title>HumbleShare</title>
 	<meta
 		name="description"
-		content="Spare Steam keys and gift links for a small group of friends."
+		content="Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!"
 	/>
 </svelte:head>
 
@@ -32,7 +32,7 @@
 	</h1>
 
 	<p class="mt-4 max-w-md text-base text-[var(--color-muted)] sm:text-lg">
-		Spare Steam keys for friends. Claim once, copy once.
+		Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!
 	</p>
 
 	<div class="mt-8 flex flex-wrap items-center justify-center gap-3">

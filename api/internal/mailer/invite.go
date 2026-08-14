@@ -43,7 +43,7 @@ func InviteEmail(inviteURL, siteURL string) (textBody, htmlBody string) {
 func inviteText(link string) string {
 	var b strings.Builder
 	b.WriteString("You've been invited to HumbleShare.\n\n")
-	b.WriteString("Spare Steam keys for friends. Claim once, copy once.\n\n")
+	b.WriteString("Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!\n\n")
 	b.WriteString("Open this link to create your account. It expires in 7 days:\n")
 	b.WriteString(link)
 	b.WriteString("\n")

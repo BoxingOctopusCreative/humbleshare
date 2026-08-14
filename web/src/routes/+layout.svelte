@@ -22,7 +22,10 @@
 		class="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 shadow-[0_4px_16px_rgba(0,0,0,0.35)] backdrop-blur"
 	>
 		<div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-			<a href={resolve('/')} class="flex items-center no-underline hover:no-underline">
+			<a
+				href={resolve(data.user ? '/games' : '/')}
+				class="flex items-center no-underline hover:no-underline"
+			>
 				<img
 					src={logoWide}
 					alt="HumbleShare"
