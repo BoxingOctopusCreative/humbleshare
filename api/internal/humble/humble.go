@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,12 +20,6 @@ const apiBase = "https://www.humblebundle.com/api/v1/order"
 
 // steamKeyLike matches typical Steam CD-key shapes (not Humble order gamekeys).
 var steamKeyLike = regexp.MustCompile(`(?i)^[A-Z0-9]{4,5}(-[A-Z0-9]{4,5}){2,4}$`)
-
-var (
-	reGiftHumanName = regexp.MustCompile(`"human_name"\s*:\s*"((?:\\.|[^"\\])*)"`)
-	reGiftOGTitle   = regexp.MustCompile(`(?i)<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']`)
-	reGiftTitleTag  = regexp.MustCompile(`(?i)<title[^>]*>\s*([^<]+?)\s*</title>`)
-)
 
 // ImportResult reports what happened for a single order key or gift URL.
 type ImportResult struct {
@@ -183,13 +176,20 @@ func normalizeSessionCookie(raw string) string {
 
 // ImportOrders fetches each order key from Humble and upserts game + code rows.
 // Gift URLs (https://www.humblebundle.com/gift?key=…) are imported as gift_link codes.
-// titles is an optional map of paste line or canonical gift URL → game title, used when
-// the gift page does not expose a title (or to skip scraping).
+// titles is required for gift URLs: map of paste line or canonical gift URL → game title.
 // The sessionCookie value is used only for the HTTP request and is never stored or logged.
 func (s *Service) ImportOrders(ctx context.Context, sessionCookie string, orderIDs []string, titles map[string]string) ([]*ImportResult, error) {
 	sessionCookie = normalizeSessionCookie(sessionCookie)
-	if sessionCookie == "" {
-		return nil, fmt.Errorf("session_cookie is required")
+	needsCookie := false
+	for _, raw := range orderIDs {
+		kind, _, err := classifyPaste(raw)
+		if err == nil && kind == pasteOrderGamekey {
+			needsCookie = true
+			break
+		}
+	}
+	if needsCookie && sessionCookie == "" {
+		return nil, fmt.Errorf("session_cookie is required for order gamekeys")
 	}
 
 	results := make([]*ImportResult, 0, len(orderIDs))
@@ -206,7 +206,7 @@ func (s *Service) ImportOrders(ctx context.Context, sessionCookie string, orderI
 		var r *ImportResult
 		switch kind {
 		case pasteGiftURL:
-			r, err = s.importGiftURL(ctx, sessionCookie, value, lookupTitle(titles, raw, value))
+			r, err = s.importGiftURL(ctx, value, lookupTitle(titles, raw, value))
 		default:
 			r, err = s.importOrder(ctx, sessionCookie, value)
 		}
@@ -239,18 +239,14 @@ func lookupTitle(titles map[string]string, keys ...string) string {
 	return ""
 }
 
-func (s *Service) importGiftURL(ctx context.Context, sessionCookie, giftURL, titleOverride string) (*ImportResult, error) {
+func (s *Service) importGiftURL(ctx context.Context, giftURL, titleOverride string) (*ImportResult, error) {
 	result := &ImportResult{OrderID: giftURL}
 	title := strings.TrimSpace(titleOverride)
 	if title == "" {
-		var err error
-		title, err = s.resolveGiftTitle(ctx, sessionCookie, giftURL)
-		if err != nil {
-			result.Failed = 1
-			result.NeedsTitle = true
-			result.Messages = append(result.Messages, "could not read game title from gift page; enter a title to continue")
-			return result, nil
-		}
+		result.Failed = 1
+		result.NeedsTitle = true
+		result.Messages = append(result.Messages, "game title is required for gift links")
+		return result, nil
 	}
 	game, err := s.games.UpsertUnresolvedByName(ctx, title)
 	if err != nil {
@@ -278,71 +274,6 @@ func (s *Service) importGiftURL(ctx context.Context, sessionCookie, giftURL, tit
 	result.Imported++
 	result.Messages = append(result.Messages, fmt.Sprintf("%s: imported gift link", title))
 	return result, nil
-}
-
-func (s *Service) resolveGiftTitle(ctx context.Context, sessionCookie, giftURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, giftURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("build gift request: %w", err)
-	}
-	req.Header.Set("Cookie", "_simpleauth_sess="+sessionCookie)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml")
-	req.Header.Set("User-Agent", "HumbleShare/1.0")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch gift page: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("humble gift page returned %d (check cookie and gift URL)", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if err != nil {
-		return "", fmt.Errorf("read gift page: %w", err)
-	}
-	html := string(body)
-
-	if m := reGiftHumanName.FindStringSubmatch(html); len(m) == 2 {
-		if name := unescapeJSONString(m[1]); name != "" && !isGenericGiftTitle(name) {
-			return name, nil
-		}
-	}
-	if m := reGiftOGTitle.FindStringSubmatch(html); len(m) == 2 {
-		if name := strings.TrimSpace(m[1]); name != "" && !isGenericGiftTitle(name) {
-			return cleanGiftTitle(name), nil
-		}
-	}
-	if m := reGiftTitleTag.FindStringSubmatch(html); len(m) == 2 {
-		if name := cleanGiftTitle(m[1]); name != "" && !isGenericGiftTitle(name) {
-			return name, nil
-		}
-	}
-	return "", fmt.Errorf("could not read game title from gift page")
-}
-
-func isGenericGiftTitle(name string) bool {
-	n := strings.ToLower(strings.TrimSpace(name))
-	return n == "" ||
-		n == "humble bundle" ||
-		strings.Contains(n, "your humble bundle receipt") ||
-		strings.Contains(n, "a very special gift for you") ||
-		strings.Contains(n, "wrong email")
-}
-
-func cleanGiftTitle(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.TrimSuffix(name, " | Humble Bundle")
-	name = strings.TrimSuffix(name, " - Humble Bundle")
-	return strings.TrimSpace(name)
-}
-
-func unescapeJSONString(s string) string {
-	var out string
-	if err := json.Unmarshal([]byte(`"`+s+`"`), &out); err != nil {
-		return strings.TrimSpace(s)
-	}
-	return strings.TrimSpace(out)
 }
 
 func (s *Service) importOrder(ctx context.Context, sessionCookie, orderID string) (*ImportResult, error) {

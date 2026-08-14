@@ -68,19 +68,19 @@ type TwoFASetupResult struct {
 }
 
 type AuthService struct {
-	users              repository.UserRepository
-	sessions           repository.SessionRepository
-	requests           repository.AccessRequestRepository
-	invites            repository.AccessInviteRepository
-	oauth              repository.OAuthIdentityRepository
-	mail               mailer.Sender
-	objects            storage.ObjectStore
-	jwtSecret          []byte
-	sessionTTL         time.Duration
-	publicWebBaseURL   string
+	users               repository.UserRepository
+	sessions            repository.SessionRepository
+	requests            repository.AccessRequestRepository
+	invites             repository.AccessInviteRepository
+	oauth               repository.OAuthIdentityRepository
+	mail                mailer.Sender
+	objects             storage.ObjectStore
+	jwtSecret           []byte
+	sessionTTL          time.Duration
+	publicWebBaseURL    string
 	userAssetsPublicURL string
-	superadminEmail    string
-	superadminPassword string
+	superadminEmail     string
+	superadminPassword  string
 }
 
 func NewAuthService(
@@ -184,7 +184,11 @@ func (s *AuthService) notifyAdminsOfRequest(ctx context.Context, ar *models.Acce
 			log.Printf("access request notify: mailer unset; would email %s request %s", to, ar.ID)
 			continue
 		}
-		if err := s.mail.Send(ctx, to, "HumbleShare access request", body); err != nil {
+		if err := s.mail.Send(ctx, mailer.Message{
+			To:      to,
+			Subject: "HumbleShare access request",
+			Text:    body,
+		}); err != nil {
 			log.Printf("access request notify: send to %s: %v", to, err)
 		}
 	}
@@ -267,13 +271,15 @@ func (s *AuthService) createAndSendInvite(
 	if s.publicWebBaseURL != "" {
 		link = s.publicWebBaseURL + "/invite/" + raw
 	}
-	body := fmt.Sprintf(
-		"You've been invited to HumbleShare.\n\nOpen this link to create your account (expires in 7 days):\n%s\n",
-		link,
-	)
+	text, html := mailer.InviteEmail(link, s.publicWebBaseURL)
 	if s.mail == nil {
 		log.Printf("invite: mailer unset; invite URL for %s: %s", email, link)
-	} else if err := s.mail.Send(ctx, email, "Your HumbleShare invite", body); err != nil {
+	} else if err := s.mail.Send(ctx, mailer.Message{
+		To:      email,
+		Subject: "Your HumbleShare invite",
+		Text:    text,
+		HTML:    html,
+	}); err != nil {
 		return inv, raw, fmt.Errorf("invite created but email failed: %w", err)
 	}
 	return inv, raw, nil

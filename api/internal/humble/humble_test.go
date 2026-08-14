@@ -1,6 +1,10 @@
 package humble
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestIsSteam(t *testing.T) {
 	cases := []struct {
@@ -109,18 +113,28 @@ func TestNormalizeSessionCookie(t *testing.T) {
 	}
 }
 
-func TestCleanGiftTitle(t *testing.T) {
-	if got := cleanGiftTitle("Hades | Humble Bundle"); got != "Hades" {
-		t.Fatalf("got %q", got)
+func TestImportGiftURLRequiresTitle(t *testing.T) {
+	s := NewService(nil, nil, nil)
+	results, err := s.ImportOrders(context.Background(), "", []string{
+		"https://www.humblebundle.com/gift?key=AbCdEfGhIjKlMnOp",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !isGenericGiftTitle("Your Humble Bundle Receipt") {
-		t.Fatal("expected generic")
+	if len(results) != 1 {
+		t.Fatalf("len=%d", len(results))
 	}
-	if !isGenericGiftTitle("A Very Special Gift For You") {
-		t.Fatal("expected special gift placeholder to be generic")
+	r := results[0]
+	if !r.NeedsTitle || r.Failed != 1 {
+		t.Fatalf("got needs_title=%v failed=%d messages=%v", r.NeedsTitle, r.Failed, r.Messages)
 	}
-	if isGenericGiftTitle("Hades") {
-		t.Fatal("real title should not be generic")
+}
+
+func TestImportOrdersRequiresCookieForGamekeys(t *testing.T) {
+	s := NewService(nil, nil, nil)
+	_, err := s.ImportOrders(context.Background(), "", []string{"AbCdEfGhIjKlMnOp"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "session_cookie is required") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

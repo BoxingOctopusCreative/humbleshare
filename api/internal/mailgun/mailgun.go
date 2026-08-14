@@ -47,17 +47,20 @@ func New(apiKey, domain, from, apiBase string) *Client {
 	}
 }
 
-// Send posts a plain-text message to one recipient.
-func (c *Client) Send(ctx context.Context, toEmail, subject, textBody string) error {
+// Send posts a message to one recipient. HTML is sent when msg.HTML is set.
+func (c *Client) Send(ctx context.Context, msg mailer.Message) error {
 	if c == nil {
 		return fmt.Errorf("mailgun: not configured")
 	}
 	endpoint := fmt.Sprintf("%s/v3/%s/messages", c.apiBase, url.PathEscape(c.domain))
 	form := url.Values{}
 	form.Set("from", c.from)
-	form.Set("to", toEmail)
-	form.Set("subject", subject)
-	form.Set("text", textBody)
+	form.Set("to", strings.TrimSpace(msg.To))
+	form.Set("subject", msg.Subject)
+	form.Set("text", msg.Text)
+	if html := strings.TrimSpace(msg.HTML); html != "" {
+		form.Set("html", html)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {

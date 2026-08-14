@@ -1,10 +1,15 @@
 package mailer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 	"time"
 )
@@ -35,25 +40,18 @@ func NewSMTP(host, port, from string) *SMTP {
 	}
 }
 
-func (s *SMTP) Send(ctx context.Context, toEmail, subject, textBody string) error {
+func (s *SMTP) Send(ctx context.Context, msg Message) error {
 	if s == nil {
 		return fmt.Errorf("smtp: not configured")
 	}
-	toEmail = strings.TrimSpace(toEmail)
+	toEmail := strings.TrimSpace(msg.To)
 	if toEmail == "" {
 		return fmt.Errorf("smtp: empty recipient")
 	}
 
-	msg := strings.Builder{}
-	msg.WriteString("From: " + s.from + "\r\n")
-	msg.WriteString("To: " + toEmail + "\r\n")
-	msg.WriteString("Subject: " + subject + "\r\n")
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(textBody)
-	if !strings.HasSuffix(textBody, "\n") {
-		msg.WriteString("\r\n")
+	raw, err := formatMessage(s.from, toEmail, msg)
+	if err != nil {
+		return err
 	}
 
 	d := net.Dialer{Timeout: 10 * time.Second}
@@ -71,7 +69,7 @@ func (s *SMTP) Send(ctx context.Context, toEmail, subject, textBody string) erro
 
 	done := make(chan error, 1)
 	go func() {
-		done <- s.send(c, toEmail, msg.String())
+		done <- s.send(c, toEmail, raw)
 	}()
 	select {
 	case <-ctx.Done():
@@ -97,7 +95,7 @@ func (s *SMTP) send(c *smtp.Client, toEmail, raw string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte(raw)); err != nil {
+	if _, err := io.WriteString(w, raw); err != nil {
 		_ = w.Close()
 		return err
 	}
@@ -105,4 +103,55 @@ func (s *SMTP) send(c *smtp.Client, toEmail, raw string) error {
 		return err
 	}
 	return c.Quit()
+}
+
+func formatMessage(from, to string, msg Message) (string, error) {
+	var buf strings.Builder
+	buf.WriteString("From: " + from + "\r\n")
+	buf.WriteString("To: " + to + "\r\n")
+	buf.WriteString("Subject: " + msg.Subject + "\r\n")
+	buf.WriteString("MIME-Version: 1.0\r\n")
+
+	htmlBody := strings.TrimSpace(msg.HTML)
+	if htmlBody == "" {
+		buf.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		buf.WriteString("\r\n")
+		buf.WriteString(msg.Text)
+		if !strings.HasSuffix(msg.Text, "\n") {
+			buf.WriteString("\r\n")
+		}
+		return buf.String(), nil
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := writeQuotedPart(mw, "text/plain; charset=UTF-8", msg.Text); err != nil {
+		return "", err
+	}
+	if err := writeQuotedPart(mw, "text/html; charset=UTF-8", htmlBody); err != nil {
+		return "", err
+	}
+	if err := mw.Close(); err != nil {
+		return "", err
+	}
+
+	buf.WriteString("Content-Type: multipart/alternative; boundary=\"" + mw.Boundary() + "\"\r\n")
+	buf.WriteString("\r\n")
+	buf.Write(body.Bytes())
+	return buf.String(), nil
+}
+
+func writeQuotedPart(mw *multipart.Writer, contentType, content string) error {
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Type", contentType)
+	h.Set("Content-Transfer-Encoding", "quoted-printable")
+	pw, err := mw.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	qp := quotedprintable.NewWriter(pw)
+	if _, err := qp.Write([]byte(content)); err != nil {
+		return err
+	}
+	return qp.Close()
 }

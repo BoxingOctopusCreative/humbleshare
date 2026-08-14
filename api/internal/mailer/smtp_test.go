@@ -7,15 +7,11 @@ import (
 )
 
 type captureSMTP struct {
-	lastTo      string
-	lastSubject string
-	lastBody    string
+	last Message
 }
 
-func (c *captureSMTP) Send(_ context.Context, to, subject, body string) error {
-	c.lastTo = to
-	c.lastSubject = subject
-	c.lastBody = body
+func (c *captureSMTP) Send(_ context.Context, msg Message) error {
+	c.last = msg
 	return nil
 }
 
@@ -35,6 +31,50 @@ func TestNewSMTPDefaults(t *testing.T) {
 	}
 	if !strings.Contains(s.from, "HumbleShare") {
 		t.Fatalf("from=%q", s.from)
+	}
+}
+
+func TestFormatMessagePlain(t *testing.T) {
+	raw, err := formatMessage("HumbleShare <noreply@localhost>", "you@example.com", Message{
+		To:      "you@example.com",
+		Subject: "Hello",
+		Text:    "plain body",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "Content-Type: text/plain; charset=UTF-8") {
+		t.Fatalf("missing text/plain: %s", raw)
+	}
+	if strings.Contains(raw, "multipart/alternative") {
+		t.Fatal("plain message should not be multipart")
+	}
+	if !strings.Contains(raw, "plain body") {
+		t.Fatal("missing body")
+	}
+}
+
+func TestFormatMessageHTML(t *testing.T) {
+	raw, err := formatMessage("HumbleShare <noreply@localhost>", "you@example.com", Message{
+		To:      "you@example.com",
+		Subject: "Your HumbleShare invite",
+		Text:    "plain invite",
+		HTML:    "<p>html invite</p>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "multipart/alternative") {
+		t.Fatalf("expected multipart: %s", raw)
+	}
+	if !strings.Contains(raw, "text/html; charset=UTF-8") {
+		t.Fatal("missing html part")
+	}
+	if !strings.Contains(raw, "plain invite") {
+		t.Fatal("missing text part")
+	}
+	if !strings.Contains(raw, "html invite") {
+		t.Fatal("missing html body")
 	}
 }
 

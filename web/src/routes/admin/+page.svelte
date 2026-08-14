@@ -13,9 +13,11 @@
 	let revealed = $state<Record<string, boolean>>({});
 
 	let humbleCookie = $state('');
+	let humbleMode = $state<'gifts' | 'orders'>('gifts');
 	let orderIds = $state('');
 	let humbleLog = $state('');
-	let humbleNeedsTitle = $state<{ giftUrl: string; title: string }[]>([]);
+	let humbleGiftTitle = $state('');
+	let humbleGiftUrl = $state('');
 	let bulkBlob = $state('');
 	let bulkPreview = $state<{ title: string; code: string }[]>([]);
 	let bulkResult = $state<BulkLineResult[] | null>(null);
@@ -78,15 +80,6 @@
 				humbleLog += `[${row.order_id}] imported=${row.imported} duplicates=${row.skipped_duplicate} non-steam=${row.skipped_non_steam} unrevealed=${row.skipped_unrevealed} failed=${row.failed}${need}\n`;
 				for (const m of row.messages ?? []) humbleLog += `  ${m}\n`;
 			}
-			const attempted = new Set(rows.map((r) => r.order_id));
-			const kept = humbleNeedsTitle.filter((r) => !attempted.has(r.giftUrl));
-			const stillNeed = rows
-				.filter((r) => r.needs_title)
-				.map((r) => ({
-					giftUrl: r.order_id,
-					title: humbleNeedsTitle.find((x) => x.giftUrl === r.order_id)?.title ?? ''
-				}));
-			humbleNeedsTitle = [...kept, ...stillNeed];
 			await invalidateAll();
 		} finally {
 			busy = false;
@@ -94,35 +87,50 @@
 	}
 
 	async function runHumbleFromPaste() {
-		const ids = orderIds
-			.split(/[\s,]+/)
-			.map((s) => s.trim())
-			.filter(Boolean);
+		if (humbleMode === 'gifts') {
+			const giftURL = humbleGiftUrl.trim();
+			const title = humbleGiftTitle.trim();
+			if (!giftURL || !title) {
+				humbleLog = 'Enter a game title and one gift URL.\n';
+				return;
+			}
+			if (parseHumbleLines(giftURL).length !== 1) {
+				humbleLog = 'Gift link mode accepts one URL at a time.\n';
+				return;
+			}
+			if (!isHumbleGiftURL(giftURL)) {
+				humbleLog = 'Gift link mode only accepts a gift?key=… URL.\n';
+				return;
+			}
+			await runHumbleImport([giftURL], { [giftURL]: title });
+			return;
+		}
+		const ids = parseHumbleLines(orderIds);
+		if (ids.length === 0) return;
+		if (ids.some(isHumbleGiftURL)) {
+			humbleLog = 'Order gamekey mode only accepts downloads?key=… URLs or order gamekeys.\n';
+			return;
+		}
 		await runHumbleImport(ids);
 	}
 
-	async function runHumbleWithTitles() {
-		const ready = humbleNeedsTitle.filter((r) => r.title.trim());
-		if (ready.length === 0) return;
-		const titles: Record<string, string> = {};
-		for (const row of ready) {
-			titles[row.giftUrl] = row.title.trim();
-		}
-		await runHumbleImport(
-			ready.map((r) => r.giftUrl),
-			titles
-		);
+	function parseHumbleLines(text: string): string[] {
+		return text
+			.split(/[\s,]+/)
+			.map((s) => s.trim())
+			.filter(Boolean);
 	}
 
-	function giftUrlLabel(url: string) {
+	function isHumbleGiftURL(line: string): boolean {
 		try {
-			const key = new URL(url).searchParams.get('key') ?? '';
-			if (key.length > 12) return `gift?key=${key.slice(0, 8)}…`;
-			if (key) return `gift?key=${key}`;
+			const u = new URL(line);
+			const host = u.hostname.toLowerCase();
+			if (host !== 'humblebundle.com' && !host.endsWith('.humblebundle.com')) return false;
+			const path = u.pathname.replace(/\/+$/, '').toLowerCase();
+			return (path === '/gift' || path.startsWith('/gift/')) && Boolean(u.searchParams.get('key'));
 		} catch {
-			/* ignore */
+			return false;
 		}
-		return url.length > 48 ? `${url.slice(0, 48)}…` : url;
 	}
 
 	async function runBulk() {
@@ -302,72 +310,85 @@
 	<section class="grid gap-8 lg:grid-cols-2">
 		<div>
 			<h2 class="font-semibold text-[var(--color-admin)]">Humble import</h2>
-			<p class="mt-1 text-sm text-[var(--color-muted)]">
-				Paste Humble <strong>gift links</strong>
-				(<code class="font-mono text-xs">gift?key=…</code>) or
-				<strong>order gamekeys</strong>
-				(<code class="font-mono text-xs">downloads?key=…</code>). Steam CD keys go in Bulk
-				paste. Cookie stays in memory for this request only - never stored.
-			</p>
-			<label class="mt-3 block text-sm">
-				<span class="text-[var(--color-muted)]">_simpleauth_sess cookie</span>
-				<input
-					class="mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs"
-					bind:value={humbleCookie}
-					autocomplete="off"
-				/>
-			</label>
-			<label class="mt-3 block text-sm">
-				<span class="text-[var(--color-muted)]"
-					>Gift URLs, downloads URLs, or order gamekeys (one per line)</span
+			<div class="mt-3 flex flex-wrap gap-2 text-sm" role="group" aria-label="Humble import type">
+				<button
+					type="button"
+					class="rounded px-3 py-1.5 {humbleMode === 'gifts'
+						? 'bg-[var(--color-admin)] text-black'
+						: 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}"
+					aria-pressed={humbleMode === 'gifts'}
+					onclick={() => (humbleMode = 'gifts')}
 				>
-				<textarea
-					class="mt-1 h-28 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs"
-					bind:value={orderIds}
-					placeholder="https://www.humblebundle.com/gift?key=…&#10;https://www.humblebundle.com/downloads?key=…"
-				></textarea>
-			</label>
+					Gift links
+				</button>
+				<button
+					type="button"
+					class="rounded px-3 py-1.5 {humbleMode === 'orders'
+						? 'bg-[var(--color-admin)] text-black'
+						: 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}"
+					aria-pressed={humbleMode === 'orders'}
+					onclick={() => (humbleMode = 'orders')}
+				>
+					Order gamekeys
+				</button>
+			</div>
+			{#if humbleMode === 'gifts'}
+				<p class="mt-3 text-sm text-[var(--color-muted)]">
+					One gift link at a time. Enter the game title and a
+					<code class="font-mono text-xs">gift?key=…</code> URL. Steam CD keys go in Bulk paste.
+				</p>
+				<label class="mt-3 block text-sm">
+					<span class="text-[var(--color-muted)]">Game title</span>
+					<input
+						class="mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+						bind:value={humbleGiftTitle}
+						placeholder="Game title"
+						disabled={busy}
+					/>
+				</label>
+				<label class="mt-3 block text-sm">
+					<span class="text-[var(--color-muted)]">Gift URL</span>
+					<input
+						class="mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs"
+						bind:value={humbleGiftUrl}
+						placeholder="https://www.humblebundle.com/gift?key=…"
+						disabled={busy}
+					/>
+				</label>
+			{:else}
+				<p class="mt-3 text-sm text-[var(--color-muted)]">
+					Paste <code class="font-mono text-xs">downloads?key=…</code> URLs or order gamekeys,
+					one per line. Titles come from Humble. The cookie stays in memory for this request.
+					Steam CD keys go in Bulk paste.
+				</p>
+				<label class="mt-3 block text-sm">
+					<span class="text-[var(--color-muted)]">_simpleauth_sess cookie</span>
+					<input
+						class="mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs"
+						bind:value={humbleCookie}
+						autocomplete="off"
+					/>
+				</label>
+				<label class="mt-3 block text-sm">
+					<span class="text-[var(--color-muted)]">Downloads URLs or order gamekeys (one per line)</span>
+					<textarea
+						class="mt-1 h-28 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs"
+						bind:value={orderIds}
+						placeholder="https://www.humblebundle.com/downloads?key=…"
+					></textarea>
+				</label>
+			{/if}
 			<button
 				type="button"
 				class="mt-3 rounded bg-[var(--color-admin)] px-3 py-1.5 text-sm font-medium text-black"
-				disabled={busy || !humbleCookie || !orderIds.trim()}
+				disabled={busy ||
+					(humbleMode === 'gifts'
+						? !humbleGiftTitle.trim() || !humbleGiftUrl.trim()
+						: !orderIds.trim() || !humbleCookie.trim())}
 				onclick={runHumbleFromPaste}
 			>
 				Import
 			</button>
-			{#if humbleNeedsTitle.length > 0}
-				<div
-					class="mt-4 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
-				>
-					<h3 class="text-sm font-semibold">Titles needed</h3>
-					<p class="mt-1 text-xs text-[var(--color-muted)]">
-						These gift links could not resolve a game title. Enter titles and import again.
-					</p>
-					<ul class="mt-3 space-y-3">
-						{#each humbleNeedsTitle as row, i (row.giftUrl)}
-							<li class="space-y-1">
-								<div class="font-mono text-[10px] text-[var(--color-muted)]" title={row.giftUrl}>
-									{giftUrlLabel(row.giftUrl)}
-								</div>
-								<input
-									class="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-sm"
-									placeholder="Game title"
-									bind:value={humbleNeedsTitle[i].title}
-									disabled={busy}
-								/>
-							</li>
-						{/each}
-					</ul>
-					<button
-						type="button"
-						class="mt-3 rounded bg-[var(--color-admin)] px-3 py-1.5 text-sm font-medium text-black disabled:opacity-50"
-						disabled={busy || !humbleCookie || !humbleNeedsTitle.some((r) => r.title.trim())}
-						onclick={runHumbleWithTitles}
-					>
-						Import with titles
-					</button>
-				</div>
-			{/if}
 			<pre
 				class="mt-3 max-h-48 overflow-auto rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-xs text-[var(--color-muted)]"
 			>{humbleLog || 'Result log…'}</pre>

@@ -31,7 +31,9 @@ func NewAdminHandler(admin *service.AdminService, humbleSvc *humble.Service, ste
 }
 
 // ImportHumble handles POST /api/v1/admin/import/humble
-// Body: {session_cookie, order_ids: [], titles?: { [gift_url]: "Game Title" }}
+// Body: {session_cookie?, order_ids: [], titles?: { [gift_url]: "Game Title" }}
+// session_cookie is required only when order_ids includes order gamekeys.
+// titles is required for each gift URL.
 func (h *AdminHandler) ImportHumble(c *fiber.Ctx) error {
 	var body struct {
 		SessionCookie string            `json:"session_cookie"`
@@ -40,9 +42,6 @@ func (h *AdminHandler) ImportHumble(c *fiber.Ctx) error {
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
-	}
-	if body.SessionCookie == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "session_cookie is required")
 	}
 	if len(body.OrderIDs) == 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "order_ids must not be empty")
