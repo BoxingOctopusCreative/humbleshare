@@ -4,8 +4,8 @@ export const SITE_NAME = 'HumbleShare';
 export const SITE_DESCRIPTION =
 	'Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!';
 
-/** Absolute path to the Open Graph image in /static. */
-export const OG_IMAGE_PATH = '/og.png';
+/** Absolute Open Graph image URL (CDN). */
+export const OG_IMAGE_URL = 'https://assets.humbleshare.com/PNG/humbleshare_wide.png';
 
-export const OG_IMAGE_WIDTH = 1200;
-export const OG_IMAGE_HEIGHT = 630;
+export const OG_IMAGE_WIDTH = 5598;
+export const OG_IMAGE_HEIGHT = 1268;

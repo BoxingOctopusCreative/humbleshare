@@ -6,7 +6,7 @@
 	import UserMenu from '$lib/components/UserMenu.svelte';
 	import {
 		OG_IMAGE_HEIGHT,
-		OG_IMAGE_PATH,
+		OG_IMAGE_URL,
 		OG_IMAGE_WIDTH,
 		SITE_DESCRIPTION,
 		SITE_NAME
@@ -22,8 +22,9 @@
 	const canonicalUrl = $derived(`${page.url.origin}${page.url.pathname}`);
 	const ogImageUrl = $derived.by(() => {
 		const custom = page.data.seo?.image;
-		if (custom?.startsWith('http')) return custom;
-		return `${page.url.origin}${custom ?? OG_IMAGE_PATH}`;
+		if (!custom) return OG_IMAGE_URL;
+		if (custom.startsWith('http')) return custom;
+		return `${page.url.origin}${custom}`;
 	});
 </script>
 
