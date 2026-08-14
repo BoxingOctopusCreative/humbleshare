@@ -23,16 +23,6 @@
 	}
 </script>
 
-<svelte:head>
-	<title>{profile.display_name} · HumbleShare</title>
-	<meta
-		name="description"
-		content={profile.bio?.trim()
-			? profile.bio.trim().slice(0, 160)
-			: `${profile.display_name} on HumbleShare`}
-	/>
-</svelte:head>
-
 {#if profile.is_owner && !profile.profile_public}
 	<div
 		class="mb-4 rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-muted)]"

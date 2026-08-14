@@ -4,7 +4,14 @@ declare global {
 	namespace App {
 		// interface Error {}
 		// interface Locals {}
-		// interface PageData {}
+		interface PageData {
+			seo?: {
+				title?: string;
+				description?: string;
+				/** Absolute URL or site path for og:image / twitter:image. */
+				image?: string;
+			};
+		}
 		// interface PageState {}
 		// interface Platform {}
 	}

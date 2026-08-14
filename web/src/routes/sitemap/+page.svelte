@@ -29,8 +29,6 @@
 </script>
 
 <svelte:head>
-	<title>Sitemap · HumbleShare</title>
-	<meta name="description" content="Map of HumbleShare pages: public, member, and admin routes." />
 	<link rel="alternate" type="application/xml" title="XML sitemap" href={sitemapXmlHref} />
 </svelte:head>
 

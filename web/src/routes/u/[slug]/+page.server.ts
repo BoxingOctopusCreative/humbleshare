@@ -11,7 +11,16 @@ export const load: PageServerLoad = async ({ cookies, params }) => {
 		const profile = await apiFetch<PublicProfile>(`/api/v1/profiles/${encodeURIComponent(params.slug)}`, {
 			sessionToken
 		});
-		return { profile };
+		const bio = profile.bio?.trim();
+		return {
+			profile,
+			seo: {
+				title: `${profile.display_name} · HumbleShare`,
+				description: bio
+					? bio.slice(0, 160)
+					: `${profile.display_name} on HumbleShare`
+			}
+		};
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			error(404, 'Profile not found');

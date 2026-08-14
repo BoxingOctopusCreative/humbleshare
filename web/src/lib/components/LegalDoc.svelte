@@ -3,21 +3,14 @@
 
 	let {
 		title,
-		description,
 		updated,
 		children
 	}: {
 		title: string;
-		description: string;
 		updated: string;
 		children: Snippet;
 	} = $props();
 </script>
-
-<svelte:head>
-	<title>{title} · HumbleShare</title>
-	<meta name="description" content={description} />
-</svelte:head>
 
 <article class="mx-auto max-w-2xl">
 	<header class="mb-8 border-b border-[var(--color-border)] pb-6">

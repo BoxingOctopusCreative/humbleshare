@@ -5,7 +5,6 @@
 
 <LegalDoc
 	title="Terms of use"
-	description="Rules for using HumbleShare: invite-only access, keys, and acceptable use."
 	updated="August 14, 2026"
 >
 	<p>

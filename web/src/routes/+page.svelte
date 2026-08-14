@@ -1,19 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import SplashBackdrop from '$lib/components/SplashBackdrop.svelte';
+	import { SITE_DESCRIPTION } from '$lib/seo';
 
 	const logoVert = 'https://assets.humbleshare.com/SVG/humbleshare_vert.svg';
 
 	let { data } = $props();
 </script>
-
-<svelte:head>
-	<title>HumbleShare</title>
-	<meta
-		name="description"
-		content="Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!"
-	/>
-</svelte:head>
 
 <SplashBackdrop />
 
@@ -32,7 +25,7 @@
 	</h1>
 
 	<p class="mt-4 max-w-md text-base text-[var(--color-muted)] sm:text-lg">
-		Got a spare Humble Gift Code? Share it with a friend, or a complete stranger!
+		{SITE_DESCRIPTION}
 	</p>
 
 	<div class="mt-8 flex flex-wrap items-center justify-center gap-3">

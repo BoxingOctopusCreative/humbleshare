@@ -5,7 +5,6 @@
 
 <LegalDoc
 	title="Privacy policy"
-	description="How HumbleShare collects, uses, and stores account and usage data."
 	updated="August 11, 2026"
 >
 	<p>

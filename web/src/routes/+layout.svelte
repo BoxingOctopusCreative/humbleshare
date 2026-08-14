@@ -1,18 +1,55 @@
 <script lang="ts">
 	import '../app.css';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import SentryClientInit from '$lib/components/SentryClientInit.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
+	import {
+		OG_IMAGE_HEIGHT,
+		OG_IMAGE_PATH,
+		OG_IMAGE_WIDTH,
+		SITE_DESCRIPTION,
+		SITE_NAME
+	} from '$lib/seo';
 
 	const favicon = 'https://assets.humbleshare.com/SVG/favicon.svg';
 	const logoWide = 'https://assets.humbleshare.com/SVG/humbleshare_wide.svg';
 
 	let { children, data } = $props();
+
+	const seoTitle = $derived(page.data.seo?.title ?? SITE_NAME);
+	const seoDescription = $derived(page.data.seo?.description ?? SITE_DESCRIPTION);
+	const canonicalUrl = $derived(`${page.url.origin}${page.url.pathname}`);
+	const ogImageUrl = $derived.by(() => {
+		const custom = page.data.seo?.image;
+		if (custom?.startsWith('http')) return custom;
+		return `${page.url.origin}${custom ?? OG_IMAGE_PATH}`;
+	});
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} type="image/svg+xml" />
-	<title>HumbleShare</title>
+	<title>{seoTitle}</title>
+	<meta name="description" content={seoDescription} />
+	<link rel="canonical" href={canonicalUrl} />
+
+	<meta property="og:site_name" content={SITE_NAME} />
+	<meta property="og:type" content="website" />
+	<meta property="og:locale" content="en_US" />
+	<meta property="og:title" content={seoTitle} />
+	<meta property="og:description" content={seoDescription} />
+	<meta property="og:url" content={canonicalUrl} />
+	<meta property="og:image" content={ogImageUrl} />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:width" content={String(OG_IMAGE_WIDTH)} />
+	<meta property="og:image:height" content={String(OG_IMAGE_HEIGHT)} />
+	<meta property="og:image:alt" content="{SITE_NAME} logo" />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={seoTitle} />
+	<meta name="twitter:description" content={seoDescription} />
+	<meta name="twitter:image" content={ogImageUrl} />
+	<meta name="twitter:image:alt" content="{SITE_NAME} logo" />
 </svelte:head>
 
 <SentryClientInit dsn={data.sentryDsn} />
